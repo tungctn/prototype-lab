@@ -17,6 +17,7 @@ import {
   FileCode2,
   Globe2,
   Grid2X2,
+  GripVertical,
   ImagePlus,
   LayoutDashboard,
   Link2,
@@ -27,11 +28,9 @@ import {
   RefreshCcw,
   RotateCcw,
   Search,
-  Send,
   Sparkles,
   Square,
-  ThumbsDown,
-  ThumbsUp,
+  Trash2,
   WandSparkles,
   X,
 } from "lucide-react";
@@ -43,9 +42,17 @@ import {
   AttachmentMedia,
   AttachmentTitle,
 } from "@/components/ui/attachment";
+import { ChatTurn } from "@/components/ai/chat";
+import {
+  CodeDiff,
+  rowsFromInlineLines,
+  rowsFromUnifiedDiff,
+  type CodeDiffRow,
+} from "@/components/ai/file-diff";
+import { AiDataTable } from "@/components/ai/data-table";
+import { AgentTodoList } from "@/components/ai/todo-list";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Bubble, BubbleContent } from "@/components/ui/bubble";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -67,14 +74,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Marker, MarkerContent, MarkerIcon } from "@/components/ui/marker";
 import {
-  Message,
-  MessageAvatar,
-  MessageContent,
-  MessageFooter,
-  MessageGroup,
-  MessageHeader,
-} from "@/components/ui/message";
-import {
   MessageScroller,
   MessageScrollerButton,
   MessageScrollerContent,
@@ -82,8 +81,14 @@ import {
   MessageScrollerProvider,
   MessageScrollerViewport,
 } from "@/components/ui/message-scroller";
+import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 const API_BASE_URL = (
@@ -102,6 +107,28 @@ const TEST_MODE = ["1", "true", "yes"].includes(
 const DEFAULT_PROTOTYPE_PREVIEW_PATH = "/patrimony";
 const SHOW_PROJECT_GUIDE_FEATURE = false;
 const SHOW_REPO_SELECTOR = true;
+const CHAT_PANEL_WIDTH_STORAGE_KEY = "archetype:workspace-chat-panel-width";
+const CHAT_PANEL_DEFAULT_WIDTH = 380;
+const CHAT_PANEL_MIN_WIDTH = 300;
+const CHAT_PANEL_MAX_WIDTH = 640;
+const PREVIEW_PANEL_MIN_WIDTH = 520;
+const CHAT_PANEL_KEYBOARD_STEP = 24;
+
+function clampNumber(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max);
+}
+
+function constrainChatPanelWidth(value: number, containerWidth?: number) {
+  const containerMaxWidth = containerWidth
+    ? containerWidth - PREVIEW_PANEL_MIN_WIDTH
+    : CHAT_PANEL_MAX_WIDTH;
+  const maxWidth = Math.max(
+    CHAT_PANEL_MIN_WIDTH,
+    Math.min(CHAT_PANEL_MAX_WIDTH, containerMaxWidth),
+  );
+
+  return clampNumber(value, CHAT_PANEL_MIN_WIDTH, maxWidth);
+}
 
 type WorkspaceSummary = {
   id: string;
@@ -472,30 +499,38 @@ const validationItems = [
   "No new color tokens introduced",
 ];
 
-const diffFiles = [
+const diffFiles: Array<HandoffFileData & { rows: CodeDiffRow[] }> = [
   {
     file: "app/billing/checkout/page.tsx",
     added: 126,
-    lines: [
-      "const upsellPlan = getPlanBySlug('team-plus')",
-      "<PlanComparison compact selectedPlan={currentPlan} />",
-      '<Button size="sm">Add team seats</Button>',
-    ],
+    removed: 4,
+    rows: rowsFromInlineLines([
+      " const currentPlan = getActivePlan(account)",
+      "+const upsellPlan = getPlanBySlug('team-plus')",
+      "-<PlanComparison selectedPlan={currentPlan} />",
+      "+<PlanComparison compact selectedPlan={currentPlan} />",
+      "+<Button size=\"sm\">Add team seats</Button>",
+    ]),
   },
   {
     file: "components/billing/plan-card.tsx",
     added: 42,
-    lines: [
-      "variant={learnedRules.includes('compact-billing-card') ? 'compact' : 'default'}",
-      'className="gap-3 rounded-xl border-border bg-card"',
-    ],
+    removed: 3,
+    rows: rowsFromInlineLines([
+      " export function PlanCard({ plan, learnedRules }) {",
+      "+  const compact = learnedRules.includes('compact-billing-card')",
+      "+  const variant = compact ? 'compact' : 'default'",
+      "-  return <Card className=\"gap-5 rounded-xl border-border bg-card\">",
+      "+  return <Card className=\"gap-3 rounded-lg border-border bg-card\">",
+    ]),
   },
   {
     file: ".codex/living-system.json",
     added: 1,
-    lines: [
-      '"compact-billing-card": "Use tight billing card spacing before promoting checkout CTAs"',
-    ],
+    removed: 0,
+    rows: rowsFromInlineLines([
+      "+\"compact-billing-card\": \"Use tight billing card spacing before promoting checkout CTAs\"",
+    ]),
   },
 ];
 
@@ -738,6 +773,16 @@ function createPreviewDiagnostic({
     diagnostics,
     nextAction,
   };
+}
+
+function formatPreviewHealthStatus(status: string | null | undefined) {
+  if (!status) {
+    return "Unknown";
+  }
+
+  return status
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function validatePreviewLocally(
@@ -1738,18 +1783,6 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   );
 }
 
-function PlatformMessageLogo() {
-  return (
-    <Image
-      src="/logo_archetype.svg"
-      alt="Archetype logo"
-      width={20}
-      height={20}
-      className="size-5"
-    />
-  );
-}
-
 function SidebarItem({
   icon: Icon,
   label,
@@ -1770,6 +1803,124 @@ function SidebarItem({
       <Icon className="size-4" />
       {label}
     </Button>
+  );
+}
+
+function WorkspaceSidebarContent({
+  headerAction,
+  onRecentOpenChange,
+  onSearchChange,
+  onSelectPrototype,
+  projectGuide,
+  recentOpen,
+  recentSessionCards,
+  searchQuery,
+  showProjectGuide = false,
+  workspaceName,
+}: {
+  headerAction?: React.ReactNode;
+  onRecentOpenChange: (value: boolean) => void;
+  onSearchChange: (value: string) => void;
+  onSelectPrototype: (card: PrototypeCardData) => void;
+  projectGuide?: ProjectGuideData | null;
+  recentOpen: boolean;
+  recentSessionCards: PrototypeCardData[];
+  searchQuery: string;
+  showProjectGuide?: boolean;
+  workspaceName: string;
+}) {
+  const visibleRecentSessionCards = useMemo(() => {
+    const normalizedQuery = searchQuery.trim().toLowerCase();
+
+    if (!normalizedQuery) {
+      return recentSessionCards;
+    }
+
+    return recentSessionCards.filter((card) =>
+      card.title.toLowerCase().includes(normalizedQuery),
+    );
+  }, [recentSessionCards, searchQuery]);
+
+  return (
+    <>
+      <div className="flex items-center justify-between px-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <Avatar className="size-7 border border-border">
+            <AvatarFallback className="bg-[oklch(0.86_0.045_255)] text-xs font-semibold text-[oklch(0.28_0.08_270)]">
+              A
+            </AvatarFallback>
+          </Avatar>
+          <span className="truncate text-sm font-semibold">
+            {workspaceName}
+          </span>
+        </div>
+        {headerAction}
+      </div>
+
+      <div className="relative mt-5">
+        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          className="h-9 rounded-full border-transparent bg-background/65 pl-9 shadow-none"
+          placeholder="Search"
+          value={searchQuery}
+          onChange={(event) => onSearchChange(event.target.value)}
+        />
+      </div>
+
+      <nav className="mt-3 space-y-1">
+        <SidebarItem icon={LayoutDashboard} label="Prototypes" active />
+      </nav>
+
+      <button
+        className="mt-5 flex w-full items-center justify-between px-2 text-sm font-medium text-muted-foreground"
+        onClick={() => onRecentOpenChange(!recentOpen)}
+        type="button"
+      >
+        Recent
+        <ChevronDown
+          className={cn(
+            "size-4 transition-transform",
+            !recentOpen && "-rotate-90",
+          )}
+        />
+      </button>
+      {recentOpen ? (
+        <div className="mt-2 space-y-1">
+          {visibleRecentSessionCards.length > 0 ? (
+            visibleRecentSessionCards.map((card) => (
+              <Button
+                key={card.id}
+                variant="ghost"
+                className="h-8 w-full justify-start gap-2 truncate rounded-xl px-3 text-[0.85rem]"
+                onClick={() => onSelectPrototype(card)}
+                type="button"
+              >
+                <span className="size-2 rounded-full bg-[var(--codex-blue)]" />
+                <span className="truncate">{card.title}</span>
+              </Button>
+            ))
+          ) : (
+            <p className="px-3 py-2 text-xs text-muted-foreground">
+              {searchQuery.trim() ? "No matching sessions." : "No sessions yet."}
+            </p>
+          )}
+        </div>
+      ) : null}
+
+      {showProjectGuide ? (
+        <div className="mt-auto rounded-2xl bg-background/45 p-3">
+          <div className="flex items-center gap-2 text-xs font-medium">
+            <BadgeCheck className="size-3.5 text-[var(--codex-purple)]" />
+            {projectGuide ? "Project guide ready" : "Project guide pending"}
+          </div>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+            {projectGuide
+              ? "Inferred from the connected repo, no design-system cleanup required."
+              : "Connect and scan a repo to replace demo guide samples."}
+          </p>
+        </div>
+      ) : null}
+    </>
   );
 }
 
@@ -2323,17 +2474,13 @@ function DashboardView({
                             type="button"
                           >
                             <GithubMark className="size-4" />
-                            Select repo
+                            <span className="max-w-40 truncate">
+                              {selectedRepoName}
+                            </span>
                             <ChevronDown className="size-3.5" />
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent className="w-72 p-0" align="start">
-                          <div className="border-b border-border/70 px-3 py-3">
-                            <Input
-                              className="h-8 border-0 bg-transparent px-0 text-base shadow-none placeholder:text-muted-foreground focus-visible:ring-0"
-                              placeholder="Search..."
-                            />
-                          </div>
                           <div className="p-2">
                             <div className="px-2 py-1 text-sm font-medium text-muted-foreground">
                               Codebase
@@ -2559,10 +2706,17 @@ function DashboardView({
                   ),
                 )
               ) : (
-                <div className="rounded-[1.35rem] border border-dashed border-border/80 bg-background/64 p-6 text-sm text-muted-foreground lg:col-span-3">
-                  {searchQuery.trim()
-                    ? "No prototypes match that search."
-                    : "No prototype sessions yet. Generate the first prompt to create a new session slug."}
+                <div className="flex min-h-40 flex-col items-center justify-center py-12 text-center lg:col-span-3">
+                  <h3 className="text-sm font-medium">
+                    {searchQuery.trim()
+                      ? "No prototypes found"
+                      : "No prototype sessions yet"}
+                  </h3>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {searchQuery.trim()
+                      ? "Try a different search term."
+                      : "Generate the first prompt to create a new session slug."}
+                  </p>
                 </div>
               )}
             </div>
@@ -2597,9 +2751,23 @@ function DashboardView({
 function WorkspaceSidebarOverlay({
   open,
   onClose,
+  onRecentOpenChange,
+  onSearchChange,
+  onSelectPrototype,
+  recentOpen,
+  recentSessionCards,
+  searchQuery,
+  workspaceName,
 }: {
   open: boolean;
   onClose: () => void;
+  onRecentOpenChange: (value: boolean) => void;
+  onSearchChange: (value: string) => void;
+  onSelectPrototype: (card: PrototypeCardData) => void;
+  recentOpen: boolean;
+  recentSessionCards: PrototypeCardData[];
+  searchQuery: string;
+  workspaceName: string;
 }) {
   if (!open) {
     return null;
@@ -2613,56 +2781,44 @@ function WorkspaceSidebarOverlay({
         onClick={onClose}
         type="button"
       />
-      <aside className="absolute left-2 top-2 flex h-[calc(100%-1rem)] w-[min(360px,calc(100vw-1rem))] flex-col rounded-2xl border border-border bg-background p-3 shadow-[0_18px_55px_oklch(0.18_0.012_260_/_0.14)]">
-        <div className="flex items-center justify-between px-1">
-          <div className="flex min-w-0 items-center gap-2">
-            <Avatar className="size-7 border border-border">
-              <AvatarFallback className="bg-[oklch(0.86_0.045_255)] text-xs">
-                5g
-              </AvatarFallback>
-            </Avatar>
-            <Button variant="ghost" size="sm" className="gap-1 px-1.5">
-              5gl
-              <ChevronDown className="size-3.5" />
-            </Button>
-          </div>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label="Collapse sidebar"
-            onClick={onClose}
-          >
-            <PanelLeft className="size-4" />
-          </Button>
-        </div>
-
-        <div className="relative mt-4">
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            className="h-10 rounded-full border-transparent bg-muted/55 pl-9 shadow-none"
-            placeholder="Search"
-          />
-        </div>
-
-        <div className="mt-5 rounded-xl border border-border bg-card p-3 text-sm leading-6 text-muted-foreground">
-          Prototype setup, preview, handoff, and logs are available through the
-          workspace tabs.
-        </div>
+      <aside className="absolute left-2 top-2 flex h-[calc(100%-1rem)] w-[min(414px,calc(100vw-1rem))] flex-col rounded-2xl border border-border bg-white p-3 text-sidebar-foreground shadow-[0_18px_55px_oklch(0.18_0.012_260_/_0.14)]">
+        <WorkspaceSidebarContent
+          onRecentOpenChange={onRecentOpenChange}
+          onSearchChange={onSearchChange}
+          onSelectPrototype={(card) => {
+            onClose();
+            onSelectPrototype(card);
+          }}
+          recentOpen={recentOpen}
+          recentSessionCards={recentSessionCards}
+          searchQuery={searchQuery}
+          workspaceName={workspaceName}
+        />
       </aside>
     </div>
   );
 }
 
 function DashboardSidebarOverlay({
+  onRecentOpenChange,
   open,
   onClose,
+  onSearchChange,
   recentSessionCards,
+  recentOpen,
+  searchQuery,
   onSelectPrototype,
+  workspaceName,
 }: {
+  onRecentOpenChange: (value: boolean) => void;
   open: boolean;
   onClose: () => void;
+  onSearchChange: (value: string) => void;
   recentSessionCards: PrototypeCardData[];
+  recentOpen: boolean;
+  searchQuery: string;
   onSelectPrototype: (card: PrototypeCardData) => void;
+  workspaceName: string;
 }) {
   if (!open) {
     return null;
@@ -2676,57 +2832,30 @@ function DashboardSidebarOverlay({
         onClick={onClose}
         type="button"
       />
-      <aside className="absolute left-2 top-2 flex h-[calc(100%-1rem)] w-[min(320px,calc(100vw-1rem))] flex-col rounded-2xl border border-border bg-background p-3 shadow-[0_18px_55px_oklch(0.18_0.012_260_/_0.14)]">
-        <div className="flex items-center justify-between px-1">
-          <div className="flex min-w-0 items-center gap-2">
-            <Avatar className="size-7 border border-border">
-              <AvatarFallback className="bg-[oklch(0.86_0.045_255)] text-xs font-semibold text-[oklch(0.28_0.08_270)]">
-                A
-              </AvatarFallback>
-            </Avatar>
-            <span className="truncate text-sm font-semibold">Archetype</span>
-          </div>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label="Close sidebar"
-            onClick={onClose}
-            type="button"
-          >
-            <X className="size-4" />
-          </Button>
-        </div>
-
-        <nav className="mt-4 space-y-1">
-          <SidebarItem icon={LayoutDashboard} label="Prototypes" active />
-        </nav>
-
-        <div className="mt-5 px-2 text-sm font-medium text-muted-foreground">
-          Recent
-        </div>
-        <div className="mt-2 space-y-1">
-          {recentSessionCards.length > 0 ? (
-            recentSessionCards.map((card) => (
-              <Button
-                key={card.id}
-                variant="ghost"
-                className="h-8 w-full justify-start gap-2 truncate rounded-xl px-3 text-[0.85rem]"
-                onClick={() => {
-                  onClose();
-                  onSelectPrototype(card);
-                }}
-                type="button"
-              >
-                <span className="size-2 rounded-full bg-[var(--codex-blue)]" />
-                <span className="truncate">{card.title}</span>
-              </Button>
-            ))
-          ) : (
-            <p className="px-3 py-2 text-xs text-muted-foreground">
-              No sessions yet.
-            </p>
-          )}
-        </div>
+      <aside className="absolute left-2 top-2 flex h-[calc(100%-1rem)] w-[min(414px,calc(100vw-1rem))] flex-col rounded-2xl border border-border bg-[oklch(0.965_0_0)] p-3 text-sidebar-foreground shadow-[0_18px_55px_oklch(0.18_0.012_260_/_0.14)]">
+        <WorkspaceSidebarContent
+          headerAction={
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Close sidebar"
+              onClick={onClose}
+              type="button"
+            >
+              <X className="size-4" />
+            </Button>
+          }
+          onRecentOpenChange={onRecentOpenChange}
+          onSearchChange={onSearchChange}
+          onSelectPrototype={(card) => {
+            onClose();
+            onSelectPrototype(card);
+          }}
+          recentOpen={recentOpen}
+          recentSessionCards={recentSessionCards}
+          searchQuery={searchQuery}
+          workspaceName={workspaceName}
+        />
       </aside>
     </div>
   );
@@ -2774,7 +2903,7 @@ function WorkspaceChrome({
     : undefined;
 
   return (
-    <div className="flex min-h-14 shrink-0 flex-wrap items-center gap-2 border-b border-border/75 bg-card px-3 py-2 lg:flex-nowrap">
+    <div className="flex min-h-14 shrink-0 flex-wrap items-center gap-2 border-b border-border/75 bg-white px-3 py-2 lg:flex-nowrap">
       <div className="flex min-w-0 items-center gap-2">
         <Button
           variant="ghost"
@@ -2872,9 +3001,9 @@ function WorkspaceChrome({
         ))}
       </div>
 
-      <div className="mx-auto hidden min-w-[240px] max-w-md flex-1 items-center justify-center lg:flex">
+      <div className="mx-auto hidden min-w-[320px] flex-1 items-center justify-center lg:flex xl:-translate-x-8 2xl:-translate-x-12">
         <form
-          className="flex h-9 w-full max-w-sm items-center gap-3 rounded-full border border-border bg-background px-4 text-sm text-muted-foreground shadow-sm focus-within:border-[oklch(0.7_0.1_260)] focus-within:ring-2 focus-within:ring-[oklch(0.82_0.075_260_/_0.45)]"
+          className="flex h-9 w-full max-w-xl items-center gap-3 rounded-full border border-border bg-white px-4 text-sm text-muted-foreground shadow-sm focus-within:border-[oklch(0.7_0.1_260)] focus-within:ring-2 focus-within:ring-[oklch(0.82_0.075_260_/_0.45)] 2xl:max-w-2xl"
           onSubmit={(event) => {
             event.preventDefault();
             onAddressSubmit();
@@ -2925,6 +3054,7 @@ function ChatRail({
   prototype,
   selectedImages,
   sendingPrompt,
+  showCorrectionControls = true,
   submittingCorrection,
 }: {
   corrections: CorrectionData[];
@@ -2951,6 +3081,7 @@ function ChatRail({
   prototype: PrototypeCardData;
   selectedImages: File[];
   sendingPrompt: boolean;
+  showCorrectionControls?: boolean;
   submittingCorrection: boolean;
 }) {
   const hasLiveMessages = messages.length > 0;
@@ -2965,188 +3096,104 @@ function ChatRail({
   const libraryRules = learnedRules.filter((rule) => rule.status !== "proposed");
 
   return (
-    <aside className="flex h-full min-h-[520px] flex-col bg-white lg:w-[360px] lg:min-w-[360px]">
-      <div className="flex items-center gap-2 border-b border-border/70 px-4 py-3">
-        <Avatar className="size-7 border border-border">
-          <AvatarFallback className="bg-[oklch(0.86_0.045_255)] text-xs">
-            LL
-          </AvatarFallback>
-        </Avatar>
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-semibold">
-            {prototype.title}
-          </div>
-          <div className="text-xs text-muted-foreground">
-            {liveStatus ?? prototype.sessionStatus}
-          </div>
-        </div>
-        <Badge variant="outline" className="rounded-full bg-card text-xs">
-          5gl
-        </Badge>
-      </div>
+    <aside className="relative flex h-full min-h-[520px] w-full flex-col bg-white">
+      <h2 className="shrink-0 truncate px-4 pt-4 text-sm font-semibold">
+        {prototype.title}
+      </h2>
 
       <MessageScrollerProvider>
-        <MessageScroller className="flex-1">
+        <MessageScroller className="flex-1 bg-white">
           <MessageScrollerViewport>
-            <MessageScrollerContent className="gap-5 p-4">
+            <MessageScrollerContent className="gap-6 px-4 pb-36 pt-5">
               {hasLiveMessages ? (
                 messages.map((message) => (
                   <MessageScrollerItem
                     key={message.id}
                     scrollAnchor={message.streaming}
                   >
-                    <MessageGroup>
-                      <Message
-                        align={message.role === "user" ? "end" : "start"}
-                      >
-                        {message.role !== "user" ? (
-                          <MessageAvatar>
-                            <PlatformMessageLogo />
-                          </MessageAvatar>
-                        ) : null}
-                        <MessageContent>
-                          {message.role !== "user" ? (
-                            <MessageHeader>Archetype</MessageHeader>
-                          ) : null}
-                          <Bubble
-                            align={message.role === "user" ? "end" : "start"}
-                            variant={
-                              message.role === "user" ? "secondary" : "outline"
-                            }
-                          >
-                            <BubbleContent>
-                              {message.content || "Đang xử lý..."}
-                            </BubbleContent>
-                          </Bubble>
-                          {message.streaming ? (
-                            <MessageFooter>
-                              Streaming from session events
-                            </MessageFooter>
-                          ) : null}
-                        </MessageContent>
-                      </Message>
-                    </MessageGroup>
+                    <ChatTurn
+                      role={message.role}
+                      content={message.content}
+                      streaming={message.streaming}
+                      variant="chatgpt"
+                      thinkingLines={[
+                        liveStatus ?? "Waiting for the session stream.",
+                        "Collecting generated text from session events.",
+                        "Preparing the prototype update response.",
+                      ]}
+                    />
                   </MessageScrollerItem>
                 ))
               ) : (
                 <>
                   <MessageScrollerItem>
-                    <MessageGroup>
-                      <Message align="end">
-                        <MessageContent>
-                          <MessageHeader>Demo sample brief</MessageHeader>
-                          <Bubble variant="secondary" align="end">
-                            <BubbleContent>
-                              Add a post-plan upsell step using the current
-                              billing layout. It should feel native to the
-                              checkout flow and avoid introducing new pricing
-                              patterns.
-                            </BubbleContent>
-                          </Bubble>
-                        </MessageContent>
-                      </Message>
-                    </MessageGroup>
+                    <ChatTurn
+                      role="user"
+                      content={[
+                        "Add a post-plan upsell step using the current billing layout.",
+                        "It should feel native to the checkout flow and avoid introducing new pricing patterns.",
+                      ].join(" ")}
+                      variant="chatgpt"
+                    />
                   </MessageScrollerItem>
 
                   <MessageScrollerItem>
-                    <Message>
-                      <MessageAvatar>
-                        <PlatformMessageLogo />
-                      </MessageAvatar>
-                      <MessageContent>
-                        <MessageHeader>Archetype</MessageHeader>
-                        <Bubble variant="outline">
-                          <BubbleContent>
-                            Demo transcript sample: the agent would map the
-                            billing route, reuse the existing plan card, and
-                            prepare a checkout upsell preview.
-                          </BubbleContent>
-                        </Bubble>
-                        <Attachment size="sm" className="bg-card">
-                          <AttachmentMedia>
-                            <FileCode2 className="size-4" />
-                          </AttachmentMedia>
-                          <AttachmentContent>
-                            <AttachmentTitle>Demo summary</AttachmentTitle>
-                            <AttachmentDescription>
-                              Static sample, not a live diff
-                            </AttachmentDescription>
-                          </AttachmentContent>
-                        </Attachment>
-                        <MessageFooter>Demo transcript sample</MessageFooter>
-                      </MessageContent>
-                    </Message>
+                    <ChatTurn
+                      role="assistant"
+                      content={[
+                        "Demo transcript sample: the agent would map the billing route,",
+                        "reuse the existing plan card, and prepare a checkout upsell preview.",
+                      ].join(" ")}
+                      variant="chatgpt"
+                    >
+                      <Attachment
+                        size="sm"
+                        className="border-[oklch(0.87_0.004_255)] bg-[oklch(0.985_0.001_255)]"
+                      >
+                        <AttachmentMedia>
+                          <FileCode2 className="size-4" />
+                        </AttachmentMedia>
+                        <AttachmentContent>
+                          <AttachmentTitle>Demo summary</AttachmentTitle>
+                          <AttachmentDescription>
+                            Static sample, not a live diff
+                          </AttachmentDescription>
+                        </AttachmentContent>
+                      </Attachment>
+                    </ChatTurn>
                   </MessageScrollerItem>
 
                   <MessageScrollerItem>
-                    <Marker variant="separator">
-                      <MarkerIcon>
-                        <BadgeCheck className="text-[var(--live)]" />
-                      </MarkerIcon>
-                      <MarkerContent>Demo validation sample</MarkerContent>
-                    </Marker>
+                    <AgentTodoList
+                      className="mx-auto w-full max-w-[75ch]"
+                      title="Demo validation sample"
+                      items={validationItems.map((item) => ({
+                        id: item,
+                        label: item,
+                        status: "done",
+                      }))}
+                    />
                   </MessageScrollerItem>
 
                   <MessageScrollerItem>
-                    <div className="space-y-2 rounded-xl border border-border/80 bg-card p-3 text-sm">
-                      {validationItems.map((item) => (
-                        <div key={item} className="flex gap-2">
-                          <Check className="mt-0.5 size-4 shrink-0 text-[var(--live)]" />
-                          <span className="leading-5">{item}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </MessageScrollerItem>
-
-                  <MessageScrollerItem>
-                    <Message align="end">
-                      <MessageContent>
-                        <MessageHeader>Designer correction</MessageHeader>
-                        <Bubble variant="tinted" align="end">
-                          <BubbleContent>
-                            Use compact billing cards, reduce CTA prominence,
-                            and follow the existing pricing-card spacing.
-                          </BubbleContent>
-                        </Bubble>
-                        <MessageFooter>
-                          <div className="flex items-center gap-1.5">
-                            <Button
-                              variant="ghost"
-                              size="icon-xs"
-                              aria-label="Copy correction"
-                            >
-                              <Copy className="size-3.5" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon-xs"
-                              aria-label="Good result"
-                            >
-                              <ThumbsUp className="size-3.5" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon-xs"
-                              aria-label="Bad result"
-                            >
-                              <ThumbsDown className="size-3.5" />
-                            </Button>
-                          </div>
-                        </MessageFooter>
-                      </MessageContent>
-                    </Message>
+                    <ChatTurn
+                      role="user"
+                      content={[
+                        "Use compact billing cards, reduce CTA prominence,",
+                        "and follow the existing pricing-card spacing.",
+                      ].join(" ")}
+                      variant="chatgpt"
+                    />
                   </MessageScrollerItem>
                 </>
               )}
 
               {liveStatus ? (
                 <MessageScrollerItem>
-                  <Marker variant="border">
-                    <MarkerIcon>
-                      <RefreshCcw className="text-[var(--codex-blue)]" />
-                    </MarkerIcon>
-                    <MarkerContent>{liveStatus}</MarkerContent>
-                  </Marker>
+                  <div className="mx-auto flex w-full max-w-[75ch] items-center gap-2 text-xs font-medium text-muted-foreground">
+                    <RefreshCcw className="size-4 text-[var(--codex-blue)]" />
+                    {liveStatus}
+                  </div>
                 </MessageScrollerItem>
               ) : null}
 
@@ -3161,43 +3208,28 @@ function ChatRail({
               {learned ? (
                 <>
                   <MessageScrollerItem>
-                    <Marker variant="border">
-                      <MarkerIcon>
-                        <Sparkles className="text-[var(--codex-purple)]" />
-                      </MarkerIcon>
-                      <MarkerContent>
-                        Demo correction captured
-                      </MarkerContent>
-                    </Marker>
+                    <div className="mx-auto flex w-full max-w-[75ch] items-center gap-2 text-xs font-medium text-muted-foreground">
+                      <Sparkles className="size-4 text-[var(--codex-purple)]" />
+                      Demo correction captured
+                    </div>
                   </MessageScrollerItem>
                   <MessageScrollerItem scrollAnchor>
-                    <Message>
-                      <MessageAvatar>
-                        <PlatformMessageLogo />
-                      </MessageAvatar>
-                      <MessageContent>
-                        <Bubble variant="outline">
-                          <BubbleContent>
-                            Demo response: the regenerated preview would use
-                            compact cards and quieter checkout CTAs.
-                          </BubbleContent>
-                        </Bubble>
-                        <MessageFooter>
-                          Demo data
-                        </MessageFooter>
-                      </MessageContent>
-                    </Message>
+                    <ChatTurn
+                      role="assistant"
+                      content="Demo response: the regenerated preview would use compact cards and quieter checkout CTAs."
+                      variant="chatgpt"
+                    />
                   </MessageScrollerItem>
                 </>
               ) : null}
             </MessageScrollerContent>
           </MessageScrollerViewport>
-          <MessageScrollerButton />
+          <MessageScrollerButton className="data-[direction=end]:bottom-28" />
         </MessageScroller>
       </MessageScrollerProvider>
 
-      <div className="border-t border-border/70 p-3">
-        <div className="rounded-[1.35rem] border border-border bg-card p-3">
+      <div className="pointer-events-none absolute inset-x-3 bottom-3 z-20">
+        <div className="pointer-events-auto rounded-[1.25rem] border border-border/80 bg-white p-3 shadow-[0_16px_48px_oklch(0.35_0.03_255_/_0.16)]">
           <input
             ref={imageInputRef}
             className="sr-only"
@@ -3211,7 +3243,7 @@ function ChatRail({
             }}
           />
           <Textarea
-            className="min-h-24 resize-none border-0 bg-transparent p-0 text-sm shadow-none focus-visible:ring-0"
+            className="max-h-32 min-h-12 resize-none border-0 bg-transparent px-3 py-1 text-sm leading-6 shadow-none focus-visible:ring-0"
             placeholder="Send a message..."
             value={prompt}
             onChange={(event) => onPromptChange(event.target.value)}
@@ -3232,7 +3264,7 @@ function ChatRail({
                 onClick={() => imageInputRef.current?.click()}
                 type="button"
               >
-                <ImagePlus className="size-4" />
+                <Plus className="size-4" />
               </Button>
               {selectedImageCount ? (
                 <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
@@ -3254,14 +3286,6 @@ function ChatRail({
             </div>
             <div className="flex items-center gap-2">
               <Button
-                variant="ghost"
-                size="sm"
-                className="gap-1.5 rounded-full"
-              >
-                <MessageSquare className="size-4" />
-                Plan
-              </Button>
-              <Button
                 size="icon"
                 className="rounded-full bg-foreground text-background hover:bg-foreground/90"
                 aria-label="Send prompt"
@@ -3271,70 +3295,72 @@ function ChatRail({
                 {sendingPrompt ? (
                   <Square className="size-4" />
                 ) : (
-                  <Send className="size-4" />
+                  <ArrowUp className="size-4" />
                 )}
               </Button>
             </div>
           </div>
-          <div className="mt-3 border-t border-border/70 pt-3">
-            <div className="text-xs font-semibold text-muted-foreground">
-              Designer correction
-            </div>
-            <Textarea
-              className="mt-2 min-h-20 text-sm"
-              placeholder="Describe what should change and why it should become reusable."
-              value={correctionText}
-              onChange={(event) => setCorrectionText(event.target.value)}
-            />
-            <div className="mt-2 grid grid-cols-2 gap-2">
-              <select
-                className="h-9 rounded-md border border-input bg-background px-2 text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/40"
-                value={targetScope}
-                onChange={(event) =>
-                  setTargetScope(
-                    event.target.value as "whole_prototype" | "route" | "component" | "file",
-                  )
-                }
-              >
-                <option value="route">Route</option>
-                <option value="component">Component</option>
-                <option value="file">File</option>
-                <option value="whole_prototype">Whole prototype</option>
-              </select>
-              <Input
-                className="h-9"
-                placeholder={prototype.routePath}
-                value={beforeContext}
-                onChange={(event) => setBeforeContext(event.target.value)}
+          {showCorrectionControls ? (
+            <div className="mt-3 border-t border-border/70 pt-3">
+              <div className="text-xs font-semibold text-muted-foreground">
+                Designer correction
+              </div>
+              <Textarea
+                className="mt-2 min-h-20 text-sm"
+                placeholder="Describe what should change and why it should become reusable."
+                value={correctionText}
+                onChange={(event) => setCorrectionText(event.target.value)}
               />
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <select
+                  className="h-9 rounded-md border border-input bg-background px-2 text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/40"
+                  value={targetScope}
+                  onChange={(event) =>
+                    setTargetScope(
+                      event.target.value as "whole_prototype" | "route" | "component" | "file",
+                    )
+                  }
+                >
+                  <option value="route">Route</option>
+                  <option value="component">Component</option>
+                  <option value="file">File</option>
+                  <option value="whole_prototype">Whole prototype</option>
+                </select>
+                <Input
+                  className="h-9"
+                  placeholder={prototype.routePath}
+                  value={beforeContext}
+                  onChange={(event) => setBeforeContext(event.target.value)}
+                />
+              </div>
+              <Input
+                className="mt-2 h-9"
+                placeholder="After context or desired rule wording"
+                value={afterContext}
+                onChange={(event) => setAfterContext(event.target.value)}
+              />
+              <Button
+                className="mt-2 w-full rounded-full"
+                disabled={submittingCorrection || !correctionText.trim()}
+                onClick={() => {
+                  onCorrectionSubmit({
+                    afterContext,
+                    beforeContext,
+                    correctionText,
+                    targetIdentifier: prototype.routePath,
+                    targetScope,
+                  });
+                  setCorrectionText("");
+                  setBeforeContext("");
+                  setAfterContext("");
+                }}
+                type="button"
+              >
+                {submittingCorrection ? "Saving correction" : "Save and propose rule"}
+              </Button>
             </div>
-            <Input
-              className="mt-2 h-9"
-              placeholder="After context or desired rule wording"
-              value={afterContext}
-              onChange={(event) => setAfterContext(event.target.value)}
-            />
-            <Button
-              className="mt-2 w-full rounded-full"
-              disabled={submittingCorrection || !correctionText.trim()}
-              onClick={() => {
-                onCorrectionSubmit({
-                  afterContext,
-                  beforeContext,
-                  correctionText,
-                  targetIdentifier: prototype.routePath,
-                  targetScope,
-                });
-                setCorrectionText("");
-                setBeforeContext("");
-                setAfterContext("");
-              }}
-              type="button"
-            >
-              {submittingCorrection ? "Saving correction" : "Save and propose rule"}
-            </Button>
-          </div>
-          {corrections.length || proposedRules.length ? (
+          ) : null}
+          {showCorrectionControls && (corrections.length || proposedRules.length) ? (
             <div className="mt-3 space-y-2 border-t border-border/70 pt-3">
               {corrections.slice(0, 3).map((correction) => (
                 <div
@@ -3372,7 +3398,7 @@ function ChatRail({
               ))}
             </div>
           ) : null}
-          {libraryRules.length ? (
+          {showCorrectionControls && libraryRules.length ? (
             <div className="mt-3 border-t border-border/70 pt-3">
               <div className="text-xs font-semibold text-muted-foreground">
                 Rule library
@@ -3434,7 +3460,7 @@ function PreviewDiagnosticState({
 }) {
   return (
     <div className="flex h-full min-h-[560px] items-center justify-center bg-card p-6">
-      <div className="w-full max-w-xl rounded-xl border border-border bg-background p-5 text-sm shadow-sm">
+      <div className="w-full max-w-xl rounded-xl border border-border bg-white p-5 text-sm shadow-sm">
         <div className="flex items-start justify-between gap-4">
           <div>
             <h3 className="font-semibold">
@@ -3446,12 +3472,17 @@ function PreviewDiagnosticState({
                 : health?.nextAction ?? "Retry after the preview app is ready."}
             </p>
           </div>
-          <Badge variant={health?.ok ? "default" : "secondary"}>
-            {checking ? "checking" : (health?.status ?? "unknown")}
+          <Badge
+            variant={health?.ok ? "default" : "outline"}
+            className={cn(!health?.ok && "bg-white")}
+          >
+            {checking
+              ? "Checking"
+              : formatPreviewHealthStatus(health?.status)}
           </Badge>
         </div>
 
-        <div className="mt-4 grid gap-2 rounded-lg bg-muted/45 p-3 font-mono text-xs">
+        <div className="mt-4 grid gap-2 rounded-lg border border-border bg-white p-3 font-mono text-xs">
           <div className="flex justify-between gap-4">
             <span className="text-muted-foreground">Expected origin</span>
             <span className="truncate">{health?.expectedOrigin ?? "Unknown"}</span>
@@ -3471,7 +3502,7 @@ function PreviewDiagnosticState({
         </div>
 
         {health?.diagnostics.length ? (
-          <div className="mt-4 rounded-lg border border-border/80 bg-card p-3 text-muted-foreground">
+          <div className="mt-4 rounded-lg border border-border/80 bg-white p-3 text-muted-foreground">
             {health.diagnostics[0]}
           </div>
         ) : null}
@@ -3656,12 +3687,6 @@ type EnvVariableRow = {
   visible: boolean;
 };
 
-const envTargets = [
-  { value: "development", label: "Development" },
-  { value: "preview", label: "Preview" },
-  { value: "production", label: "Production" },
-] satisfies Array<{ value: EnvTarget; label: string }>;
-
 function createEnvRowId() {
   return `env-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -3734,6 +3759,37 @@ function serializeEnvRows(rows: EnvVariableRow[]) {
     .join("\n");
 }
 
+function ToolbarIconButton({
+  children,
+  disabled,
+  label,
+  onClick,
+}: {
+  children: React.ReactNode;
+  disabled?: boolean;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="rounded-md"
+          disabled={disabled}
+          aria-label={label}
+          onClick={onClick}
+          type="button"
+        >
+          {children}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent sideOffset={6}>{label}</TooltipContent>
+    </Tooltip>
+  );
+}
+
 function SetupCanvas({
   projectGuide,
   prototype,
@@ -3746,16 +3802,8 @@ function SetupCanvas({
   const [refreshedGuide, setRefreshedGuide] =
     useState<ProjectGuideData | null>(null);
   const activeProjectGuide = refreshedGuide ?? projectGuide;
-  const envRequirements = useMemo(
-    () => activeProjectGuide?.guide.content.environment ?? [],
-    [activeProjectGuide?.guide.content.environment],
-  );
-  const detectedRows = useMemo(
-    () => envRowsFromRequirements(envRequirements),
-    [envRequirements],
-  );
   const [envRows, setEnvRows] = useState<EnvVariableRow[]>([]);
-  const displayRows = envRows.length > 0 ? envRows : detectedRows;
+  const displayRows = envRows;
   const [pasteValue, setPasteValue] = useState("");
   const [pasteOpen, setPasteOpen] = useState(false);
   const [copyStatus, setCopyStatus] = useState<string | null>(null);
@@ -3786,7 +3834,7 @@ function SetupCanvas({
     {
       name: "Guide commit",
       value:
-        projectGuide?.guide.commitSha?.slice(0, 7) ??
+        activeProjectGuide?.guide.commitSha?.slice(0, 7) ??
         repoConnection?.currentCommitSha?.slice(0, 7) ??
         "Not scanned",
     },
@@ -3796,19 +3844,13 @@ function SetupCanvas({
     },
   ];
   const envText = serializeEnvRows(displayRows);
-  const completeEnvCount = displayRows.filter(
-    (row) => row.key.trim() && row.value.trim(),
-  ).length;
-  const missingEnvCount = displayRows.filter(
-    (row) => row.required && !row.value.trim(),
-  ).length;
 
   function updateEnvRow(
     rowId: string,
     patch: Partial<Omit<EnvVariableRow, "id">>,
   ) {
     setEnvRows((currentRows) =>
-      (currentRows.length > 0 ? currentRows : displayRows).map((row) =>
+      currentRows.map((row) =>
         row.id === rowId
           ? {
               ...row,
@@ -3825,7 +3867,7 @@ function SetupCanvas({
 
   function addManualRow() {
     setEnvRows((currentRows) => [
-      ...(currentRows.length > 0 ? currentRows : displayRows),
+      ...currentRows,
       {
         id: createEnvRowId(),
         key: "",
@@ -3839,12 +3881,6 @@ function SetupCanvas({
         visible: false,
       },
     ]);
-  }
-
-  function importDetectedRows() {
-    setEnvRows(detectedRows);
-    setSaveStatus(null);
-    setEnvError(null);
   }
 
   function parsePastedEnv() {
@@ -3937,15 +3973,15 @@ function SetupCanvas({
           </p>
         </div>
 
-        <section className="overflow-hidden rounded-xl border border-border">
-          <div className="grid grid-cols-[0.8fr_1.2fr] border-b border-border bg-muted/35 px-4 py-3 text-sm font-medium">
+        <section className="overflow-hidden rounded-xl border border-border bg-white">
+          <div className="grid grid-cols-[0.8fr_1.2fr] border-b border-border bg-white px-4 py-3 text-sm font-medium">
             <span>Context</span>
             <span>Value</span>
           </div>
           {contextRows.map((row) => (
             <div
               key={row.name}
-              className="grid grid-cols-[0.8fr_1.2fr] items-center gap-3 border-b border-border/70 px-4 py-3 text-sm last:border-b-0"
+              className="grid grid-cols-[0.8fr_1.2fr] items-center gap-3 border-b border-border/70 bg-white px-4 py-3 text-sm last:border-b-0"
             >
               <span className="text-muted-foreground">{row.name}</span>
               <span className="min-w-0 truncate font-medium">{row.value}</span>
@@ -3953,81 +3989,67 @@ function SetupCanvas({
           ))}
         </section>
 
-        <section className="overflow-hidden rounded-xl border border-border">
-          <div className="flex flex-col gap-3 border-b border-border bg-muted/35 px-4 py-3 xl:flex-row xl:items-center xl:justify-between">
-            <div>
-              <h4 className="text-sm font-semibold">Environment variables</h4>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {completeEnvCount} filled, {missingEnvCount} missing,
-                {` ${envRequirements.length}`} detected from source.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                variant="secondary"
-                className="rounded-full"
-                disabled={refreshingGuide}
-                onClick={refreshGuide}
-                type="button"
-              >
-                <RefreshCcw
-                  className={cn("size-4", refreshingGuide && "animate-spin")}
-                />
-                Refresh
-              </Button>
-              <Button
-                variant="secondary"
-                className="rounded-full"
-                disabled={envRequirements.length === 0}
-                onClick={importDetectedRows}
-                type="button"
-              >
-                <WandSparkles className="size-4" />
-                Import detected
-              </Button>
-              <Button
-                variant="secondary"
-                className="rounded-full"
-                onClick={() => setPasteOpen((value) => !value)}
-                type="button"
-              >
-                <FileCode2 className="size-4" />
-                Paste .env
-              </Button>
-              <Button
-                variant="secondary"
-                className="rounded-full"
-                onClick={addManualRow}
-                type="button"
-              >
-                <Plus className="size-4" />
-                Add variable
-              </Button>
-              <Button
-                variant="secondary"
-                className="rounded-full"
-                disabled={!envText}
-                onClick={copyEnvText}
-                type="button"
-              >
-                <Copy className="size-4" />
-                {copyStatus ?? "Copy"}
-              </Button>
-              <Button
-                className="rounded-full"
-                disabled={savingEnv || displayRows.length === 0}
-                onClick={saveEnvFile}
-                type="button"
-              >
-                {savingEnv ? "Saving" : "Save .env.local"}
-              </Button>
+        <section className="overflow-hidden rounded-xl border border-border bg-white">
+          <div className="border-b border-border bg-white px-4 py-4">
+            <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+              <div className="min-w-0">
+                <h4 className="text-sm font-semibold">
+                  Environment variables
+                </h4>
+              </div>
+
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center xl:justify-end">
+                <div className="flex w-fit items-center gap-1 rounded-lg border border-border bg-white p-1">
+                  <ToolbarIconButton
+                    label="Refresh detected variables"
+                    disabled={refreshingGuide}
+                    onClick={refreshGuide}
+                  >
+                    <RefreshCcw
+                      className={cn(
+                        "size-4",
+                        refreshingGuide && "animate-spin",
+                      )}
+                    />
+                  </ToolbarIconButton>
+                  <ToolbarIconButton
+                    label="Paste .env"
+                    onClick={() => setPasteOpen((value) => !value)}
+                  >
+                    <FileCode2 className="size-4" />
+                  </ToolbarIconButton>
+                  <ToolbarIconButton
+                    label="Add variable"
+                    onClick={addManualRow}
+                  >
+                    <Plus className="size-4" />
+                  </ToolbarIconButton>
+                  <div className="mx-1 h-5 w-px bg-border" />
+                  <ToolbarIconButton
+                    label={copyStatus ?? "Copy .env text"}
+                    disabled={!envText}
+                    onClick={copyEnvText}
+                  >
+                    <Copy className="size-4" />
+                  </ToolbarIconButton>
+                </div>
+
+                <Button
+                  className="h-11 w-full justify-center px-5 text-base sm:w-auto"
+                  disabled={savingEnv || displayRows.length === 0}
+                  onClick={saveEnvFile}
+                  type="button"
+                >
+                  {savingEnv ? "Saving" : "Save .env.local"}
+                </Button>
+              </div>
             </div>
           </div>
 
           {pasteOpen ? (
-            <div className="border-b border-border bg-background px-4 py-4">
+            <div className="border-b border-border bg-white px-4 py-4">
               <Textarea
-                className="min-h-36 font-mono text-xs"
+                className="min-h-36 bg-white font-mono text-xs"
                 placeholder={"DATABASE_URL=mongodb+srv://...\nNEXTAUTH_SECRET=..."}
                 value={pasteValue}
                 onChange={(event) => setPasteValue(event.target.value)}
@@ -4054,24 +4076,21 @@ function SetupCanvas({
 
           {envRows.length > 0 ? (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1120px] text-sm">
-                <thead className="border-b border-border bg-muted/20 text-left text-xs font-medium text-muted-foreground">
+              <table className="w-full min-w-[760px] text-sm">
+                <thead className="border-b border-border bg-white text-left text-xs font-medium text-muted-foreground">
                   <tr>
-                    <th className="w-[250px] px-4 py-3">Key</th>
-                    <th className="w-[300px] px-4 py-3">Value</th>
-                    <th className="w-[150px] px-4 py-3">Environment</th>
-                    <th className="w-[130px] px-4 py-3">Type</th>
-                    <th className="px-4 py-3">Source</th>
-                    <th className="w-[130px] px-4 py-3">Status</th>
+                    <th className="w-[280px] px-4 py-3">Key</th>
+                    <th className="px-4 py-3">Value</th>
+                    <th className="w-[120px] px-4 py-3">Secret</th>
                     <th className="w-[56px] px-4 py-3" aria-label="Actions" />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/70">
                   {envRows.map((row) => (
-                    <tr key={row.id} className="align-top">
+                    <tr key={row.id} className="bg-white align-top">
                       <td className="px-4 py-3">
                         <Input
-                          className="h-9 font-mono text-xs"
+                          className="h-9 bg-white font-mono text-xs"
                           placeholder="VARIABLE_NAME"
                           value={row.key}
                           onChange={(event) =>
@@ -4084,9 +4103,12 @@ function SetupCanvas({
                         />
                       </td>
                       <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
+                        <div className="relative">
                           <Input
-                            className="h-9 font-mono text-xs"
+                            className={cn(
+                              "h-9 bg-white font-mono text-xs",
+                              row.sensitive && "pr-10",
+                            )}
                             placeholder="Paste value"
                             type={
                               row.sensitive && !row.visible
@@ -4104,6 +4126,7 @@ function SetupCanvas({
                             <Button
                               variant="ghost"
                               size="icon-sm"
+                              className="absolute right-1 top-1/2 -translate-y-1/2 transition-none hover:bg-transparent active:!translate-y-[-50%]"
                               aria-label={
                                 row.visible ? "Hide value" : "Show value"
                               }
@@ -4124,68 +4147,24 @@ function SetupCanvas({
                         </div>
                       </td>
                       <td className="px-4 py-3">
-                        <select
-                          className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/40"
-                          value={row.target}
-                          onChange={(event) =>
-                            updateEnvRow(row.id, {
-                              target: event.target.value as EnvTarget,
-                            })
-                          }
-                        >
-                          {envTargets.map((target) => (
-                            <option key={target.value} value={target.value}>
-                              {target.label}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
-                      <td className="px-4 py-3">
-                        <label className="flex items-center gap-2 text-sm">
-                          <input
-                            className="size-4 accent-[var(--codex-blue)]"
-                            type="checkbox"
+                        <label className="flex h-9 items-center gap-2 text-sm">
+                          <Switch
                             checked={row.sensitive}
-                            onChange={(event) =>
+                            aria-label={`Mark ${row.key || "variable"} as secret`}
+                            onCheckedChange={(checked) =>
                               updateEnvRow(row.id, {
-                                sensitive: event.target.checked,
+                                sensitive: checked,
                               })
                             }
                           />
-                          Secret
+                          <span>Secret</span>
                         </label>
-                        <div className="mt-1 text-xs text-muted-foreground">
-                          {row.public ? "Public key" : "Server value"}
-                        </div>
                       </td>
-                      <td className="px-4 py-3">
-                        <div className="text-xs text-muted-foreground">
-                          {row.reason}
-                        </div>
-                        {row.sources.length > 0 ? (
-                          <div className="mt-1 flex flex-wrap gap-1">
-                            {row.sources.slice(0, 2).map((source) => (
-                              <code
-                                key={`${row.id}-${source.file}`}
-                                className="rounded-md bg-muted px-1.5 py-0.5 text-[0.72rem] text-foreground"
-                              >
-                                {source.file}
-                              </code>
-                            ))}
-                          </div>
-                        ) : null}
-                      </td>
-                      <td className="px-4 py-3">
-                        <Badge
-                          variant={row.value.trim() ? "default" : "secondary"}
-                        >
-                          {row.value.trim() ? "Ready" : "Missing value"}
-                        </Badge>
-                      </td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3 text-center align-middle">
                         <Button
                           variant="ghost"
                           size="icon-sm"
+                          className="mx-auto rounded-md"
                           aria-label={`Remove ${row.key || "variable"}`}
                           onClick={() =>
                             setEnvRows((currentRows) =>
@@ -4196,7 +4175,7 @@ function SetupCanvas({
                           }
                           type="button"
                         >
-                          <X className="size-4" />
+                          <Trash2 className="size-4" />
                         </Button>
                       </td>
                     </tr>
@@ -4205,9 +4184,17 @@ function SetupCanvas({
               </table>
             </div>
           ) : (
-            <div className="px-4 py-8 text-sm text-muted-foreground">
-              No environment rows yet. Import detected variables, paste an env
-              file, or add one manually.
+            <div className="flex flex-col items-center justify-center bg-white px-6 py-12 text-center">
+              <div className="flex size-10 items-center justify-center rounded-lg border border-border bg-white text-muted-foreground">
+                <FileCode2 className="size-5" />
+              </div>
+              <h5 className="mt-4 text-sm font-medium">
+                No environment variables yet
+              </h5>
+              <p className="mt-1 max-w-md text-sm leading-6 text-muted-foreground">
+                Import detected keys, paste an env file, or add a variable to
+                build the `.env.local` table.
+              </p>
             </div>
           )}
 
@@ -4225,7 +4212,7 @@ function SetupCanvas({
           ) : null}
         </section>
 
-        <div className="rounded-xl border border-border bg-muted/25 px-4 py-3 text-sm leading-6 text-muted-foreground">
+        <div className="rounded-xl border border-border bg-white px-4 py-3 text-sm leading-6 text-muted-foreground">
           Save writes `.env.local` in the connected checkout only. Restart the
           preview dev server after saving so Next.js reloads the values.
         </div>
@@ -4283,109 +4270,91 @@ function ChangesCanvas({
   learned: boolean;
 }) {
   const files = handoff?.files.length ? handoff.files : diffFiles;
-  const demoHandoff = !handoff;
 
   return (
     <div className="h-full min-h-[560px] overflow-auto bg-card p-4">
-      <div className="mb-3 flex items-center justify-between rounded-lg bg-muted px-3 py-2 text-sm">
-        <Badge variant="secondary" className="rounded-full font-mono">
-          {handoff?.run.outputCommitSha?.slice(0, 7) ??
-            handoff?.run.inputCommitSha?.slice(0, 7) ??
-            "demo"}
-        </Badge>
-        <span className="text-muted-foreground">
-          {handoff?.run.status ?? "demo handoff sample"}
-        </span>
-      </div>
       {handoff ? (
-        <div className="mb-4 rounded-xl border border-border/80 bg-background p-3 text-sm">
-          <div className="font-medium">Run handoff</div>
-          <p className="mt-1 leading-6 text-muted-foreground">
-            {handoff.summary}
-          </p>
-          <div className="mt-2 flex flex-wrap gap-2">
-            <Badge variant="outline" className="rounded-full">
-              Preview {handoff.previewHealth.status}
+        <>
+          <div className="mb-3 flex items-center justify-between rounded-lg border border-border bg-white px-3 py-2 text-sm">
+            <Badge
+              variant="outline"
+              className="rounded-full bg-white font-mono"
+            >
+              {handoff.run.outputCommitSha?.slice(0, 7) ??
+                handoff.run.inputCommitSha?.slice(0, 7)}
             </Badge>
-            <Badge variant="outline" className="rounded-full">
-              Tests {handoff.tests.status}
-            </Badge>
-            <Badge variant="outline" className="rounded-full">
-              {handoff.appliedRules.length} rules applied
-            </Badge>
+            <span className="text-muted-foreground">{handoff.run.status}</span>
           </div>
-          {handoff.tests.results?.length ? (
-            <div className="mt-3 space-y-1 rounded-lg bg-muted/40 p-2 font-mono text-xs">
-              {handoff.tests.results.map((result) => (
-                <div
-                  key={result.command}
-                  className="flex items-center justify-between gap-3"
-                >
-                  <span className="truncate">{result.command}</span>
-                  <span>{result.status}</span>
-                </div>
-              ))}
+          <div className="mb-4 rounded-xl border border-border/80 bg-white p-3 text-sm">
+            <div className="font-medium">Run handoff</div>
+            <p className="mt-1 leading-6 text-muted-foreground">
+              {handoff.summary}
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <Badge variant="outline" className="rounded-full">
+                Preview {handoff.previewHealth.status}
+              </Badge>
+              <Badge variant="outline" className="rounded-full">
+                Tests {handoff.tests.status}
+              </Badge>
+              <Badge variant="outline" className="rounded-full">
+                {handoff.appliedRules.length} rules applied
+              </Badge>
             </div>
-          ) : null}
-          {handoff.appliedRules.length ? (
-            <div className="mt-3 space-y-1 text-xs">
-              {handoff.appliedRules.map((application) => (
-                <div
-                  key={application.id}
-                  className="flex items-center justify-between gap-3 rounded-lg border border-border/80 px-2 py-1.5"
-                >
-                  <span className="truncate">
-                    {application.rule?.title ?? "Learned rule"}
-                  </span>
-                  <Badge variant="outline" className="h-5 rounded-full text-[0.68rem]">
-                    {application.status}
-                  </Badge>
-                </div>
-              ))}
-            </div>
-          ) : null}
-        </div>
-      ) : (
-        <div className="mb-4 rounded-xl border border-border/80 bg-background p-3 text-sm">
-          <div className="font-medium">Demo handoff sample</div>
-          <p className="mt-1 leading-6 text-muted-foreground">
-            Static sample diff shown until a run produces an actual handoff.
-          </p>
-        </div>
-      )}
-      <div className="space-y-6">
-        {files.map((file) => (
-          <section key={file.file}>
-            <div className="flex items-center justify-between px-2 pb-2 text-sm font-semibold">
-              <div className="flex min-w-0 items-center gap-2">
-                <Plus className="size-4 rounded-full border border-[var(--live)] text-[var(--live)]" />
-                <span className="truncate">{file.file}</span>
+            {handoff.tests.results?.length ? (
+              <AiDataTable
+                className="mt-3"
+                columns={[
+                  { key: "command", header: "Command", className: "font-mono text-xs" },
+                  { key: "status", header: "Status", className: "w-28" },
+                  { key: "duration", header: "Duration", className: "w-28 text-right" },
+                ]}
+                rows={handoff.tests.results.map((result) => ({
+                  id: result.command,
+                  cells: {
+                    command: <span className="block max-w-[28rem] truncate">{result.command}</span>,
+                    status: result.status,
+                    duration: `${result.durationMs}ms`,
+                  },
+                }))}
+              />
+            ) : null}
+            {handoff.appliedRules.length ? (
+              <div className="mt-3 space-y-1 text-xs">
+                {handoff.appliedRules.map((application) => (
+                  <div
+                    key={application.id}
+                    className="flex items-center justify-between gap-3 rounded-lg border border-border/80 px-2 py-1.5"
+                  >
+                    <span className="truncate">
+                      {application.rule?.title ?? "Learned rule"}
+                    </span>
+                    <Badge variant="outline" className="h-5 rounded-full text-[0.68rem]">
+                      {application.status}
+                    </Badge>
+                  </div>
+                ))}
               </div>
-              <span className="text-[var(--live)]">
-                {demoHandoff ? "sample" : `+${file.added}`}
-              </span>
-            </div>
-            <div className="overflow-hidden rounded-lg bg-[oklch(0.94_0.035_168)] font-mono text-sm">
-              {(handoff
-                ? handoff.diffSnippet
-                    .filter((line) => line.includes(file.file) || line.startsWith("+"))
-                    .slice(0, 8)
-                : "lines" in file
-                  ? file.lines
-                  : []
-              ).map((line, index) => (
-                <div key={line} className="grid grid-cols-[48px_1fr]">
-                  <span className="bg-[oklch(0.9_0.045_170)] px-3 py-1.5 text-right text-[oklch(0.54_0.12_168)]">
-                    {index + 1}
-                  </span>
-                  <code className="min-w-0 truncate px-3 py-1.5 text-[oklch(0.36_0.12_155)]">
-                    {line}
-                  </code>
-                </div>
-              ))}
-            </div>
-          </section>
-        ))}
+            ) : null}
+          </div>
+        </>
+      ) : null}
+      <div className="space-y-6">
+        {files.map((file) => {
+          const rows: CodeDiffRow[] = handoff
+            ? rowsFromUnifiedDiff(handoff.diffSnippet, file.file)
+            : (file as (typeof diffFiles)[number]).rows;
+
+          return (
+            <CodeDiff
+              key={file.file}
+              file={file.file}
+              rows={rows}
+              added={file.added}
+              removed={file.removed}
+            />
+          );
+        })}
         {learned ? (
           <Marker className="rounded-xl border border-[oklch(0.72_0.09_270)] bg-[oklch(0.95_0.035_274)] p-3 text-foreground">
             <MarkerIcon>
@@ -4431,34 +4400,30 @@ function LogsCanvas({
       <div className="mb-4 flex items-center justify-between gap-3">
         <div>
           <h3 className="text-sm font-semibold">
-            {events.length ? "Run logs" : "Demo logs sample"}
+            {events.length ? "Run logs" : "Sample logs"}
           </h3>
           <p className="mt-1 text-sm text-muted-foreground">
             {events.length
-              ? "Persisted events for this run."
-              : "Static sample events shown until a run emits logs."}
+              ? "Events emitted by this run."
+              : "Static sample events are shown until a run emits logs."}
           </p>
         </div>
       </div>
-      <div className="overflow-hidden rounded-xl border border-border">
-        <div className="grid grid-cols-[160px_160px_1fr] border-b border-border bg-muted/45 px-4 py-3 text-sm font-semibold">
-          <span>Time</span>
-          <span>Source</span>
-          <span>Message</span>
-        </div>
-        <div className="divide-y divide-border/70">
-          {logs.map(([time, source, message]) => (
-            <div
-              key={`${time}-${message}`}
-              className="grid grid-cols-[160px_160px_1fr] px-4 py-3 font-mono text-sm"
-            >
-              <span>{time}</span>
-              <span>{source}</span>
-              <span className="truncate">{message}</span>
-            </div>
-          ))}
-        </div>
-      </div>
+      <AiDataTable
+        columns={[
+          { key: "time", header: "Time", className: "w-40 font-mono text-xs" },
+          { key: "source", header: "Source", className: "w-40 font-mono text-xs" },
+          { key: "message", header: "Message", className: "font-mono text-xs" },
+        ]}
+        rows={logs.map(([time, source, message]) => ({
+          id: `${time}-${message}`,
+          cells: {
+            time,
+            source,
+            message: <span className="block max-w-[36rem] truncate">{message}</span>,
+          },
+        }))}
+      />
     </div>
   );
 }
@@ -4555,9 +4520,13 @@ function PrototypeWorkspace({
   onPatchPrototype,
   prototype,
   projectGuide,
+  recentSessionCards,
   repoConnection,
   onBack,
+  onSelectPrototype,
   sendingPrompt,
+  showCorrectionControls = true,
+  workspaceName,
 }: {
   chatError: string | null;
   chatImages: File[];
@@ -4576,9 +4545,13 @@ function PrototypeWorkspace({
   ) => void;
   prototype: PrototypeCardData;
   projectGuide: ProjectGuideData | null;
+  recentSessionCards: PrototypeCardData[];
   repoConnection: RepoConnectionData | null;
   onBack: () => void;
+  onSelectPrototype: (card: PrototypeCardData) => void;
   sendingPrompt: boolean;
+  showCorrectionControls?: boolean;
+  workspaceName: string;
 }) {
   const [activeTab, setActiveTab] = useState<WorkspaceTab>(initialTab);
   const [learned, setLearned] = useState(initialLearned);
@@ -4588,7 +4561,24 @@ function PrototypeWorkspace({
   const [learnedRules, setLearnedRules] = useState<LearnedRuleData[]>([]);
   const [submittingCorrection, setSubmittingCorrection] = useState(false);
   const [chatOpen, setChatOpen] = useState(true);
+  const workspaceSplitRef = useRef<HTMLDivElement>(null);
+  const [chatPanelWidth, setChatPanelWidth] = useState(() => {
+    if (typeof window === "undefined") {
+      return CHAT_PANEL_DEFAULT_WIDTH;
+    }
+
+    const storedWidth = Number(
+      window.localStorage.getItem(CHAT_PANEL_WIDTH_STORAGE_KEY),
+    );
+
+    return Number.isFinite(storedWidth)
+      ? constrainChatPanelWidth(storedWidth)
+      : CHAT_PANEL_DEFAULT_WIDTH;
+  });
+  const [resizingChatPanel, setResizingChatPanel] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarSearch, setSidebarSearch] = useState("");
+  const [recentOpen, setRecentOpen] = useState(true);
   const resolvedPreviewUrl = resolvePrototypePreviewUrl(prototype);
   const [addressValue, setAddressValue] = useState(
     resolvedPreviewUrl ?? prototype.routePath,
@@ -4614,6 +4604,89 @@ function PrototypeWorkspace({
   );
   const expectedPreviewRoute = normalizeExpectedPreviewRoute(
     prototype.routePath,
+  );
+
+  const resizeChatPanel = useCallback((clientX: number) => {
+    const splitRect = workspaceSplitRef.current?.getBoundingClientRect();
+
+    if (!splitRect) {
+      return;
+    }
+
+    setChatPanelWidth(
+      constrainChatPanelWidth(clientX - splitRect.left, splitRect.width),
+    );
+  }, []);
+
+  const handleChatResizePointerDown = useCallback(
+    (event: React.PointerEvent<HTMLButtonElement>) => {
+      event.preventDefault();
+      setResizingChatPanel(true);
+      resizeChatPanel(event.clientX);
+      document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
+
+      function handlePointerMove(moveEvent: PointerEvent) {
+        resizeChatPanel(moveEvent.clientX);
+      }
+
+      function handlePointerEnd() {
+        setResizingChatPanel(false);
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+        window.removeEventListener("pointermove", handlePointerMove);
+        window.removeEventListener("pointerup", handlePointerEnd);
+        window.removeEventListener("pointercancel", handlePointerEnd);
+      }
+
+      window.addEventListener("pointermove", handlePointerMove);
+      window.addEventListener("pointerup", handlePointerEnd, { once: true });
+      window.addEventListener("pointercancel", handlePointerEnd, {
+        once: true,
+      });
+    },
+    [resizeChatPanel],
+  );
+
+  const resizeChatPanelBy = useCallback((delta: number) => {
+    const containerWidth = workspaceSplitRef.current?.getBoundingClientRect()
+      .width;
+
+    setChatPanelWidth((currentWidth) =>
+      constrainChatPanelWidth(currentWidth + delta, containerWidth),
+    );
+  }, []);
+
+  const handleChatResizeKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLButtonElement>) => {
+      if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        resizeChatPanelBy(-CHAT_PANEL_KEYBOARD_STEP);
+        return;
+      }
+
+      if (event.key === "ArrowRight") {
+        event.preventDefault();
+        resizeChatPanelBy(CHAT_PANEL_KEYBOARD_STEP);
+        return;
+      }
+
+      if (event.key === "Home") {
+        event.preventDefault();
+        setChatPanelWidth(CHAT_PANEL_MIN_WIDTH);
+        return;
+      }
+
+      if (event.key === "End") {
+        event.preventDefault();
+        const containerWidth = workspaceSplitRef.current?.getBoundingClientRect()
+          .width;
+        setChatPanelWidth(
+          constrainChatPanelWidth(CHAT_PANEL_MAX_WIDTH, containerWidth),
+        );
+      }
+    },
+    [resizeChatPanelBy],
   );
 
   const syncPreviewUrlFromFrame = useCallback((value: string) => {
@@ -4642,6 +4715,31 @@ function PrototypeWorkspace({
 
     setPreviewReloadKey((value) => value + 1);
   }, [previewUrl]);
+
+  useEffect(() => {
+    window.localStorage.setItem(
+      CHAT_PANEL_WIDTH_STORAGE_KEY,
+      String(chatPanelWidth),
+    );
+  }, [chatPanelWidth]);
+
+  useEffect(() => {
+    function constrainWidthForViewport() {
+      const containerWidth = workspaceSplitRef.current?.getBoundingClientRect()
+        .width;
+
+      setChatPanelWidth((currentWidth) =>
+        constrainChatPanelWidth(currentWidth, containerWidth),
+      );
+    }
+
+    constrainWidthForViewport();
+    window.addEventListener("resize", constrainWidthForViewport);
+
+    return () => {
+      window.removeEventListener("resize", constrainWidthForViewport);
+    };
+  }, []);
 
   const handleCancelRun = useCallback(() => {
     if (!activeRunId) {
@@ -4759,7 +4857,8 @@ function PrototypeWorkspace({
                   ? error.message
                   : "Preview health request failed.",
               ],
-              nextAction: "Retry health check or confirm the API is running.",
+              nextAction:
+                "Retry the preview health check or confirm the preview app is running.",
             }),
           );
         }
@@ -4914,10 +5013,17 @@ function PrototypeWorkspace({
   };
 
   return (
-    <div className="relative flex h-full min-h-0 flex-col overflow-hidden bg-[oklch(0.968_0.004_255)]">
+    <div className="relative flex h-full min-h-0 flex-col overflow-hidden bg-white">
       <WorkspaceSidebarOverlay
         open={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
+        onRecentOpenChange={setRecentOpen}
+        onSearchChange={setSidebarSearch}
+        onSelectPrototype={onSelectPrototype}
+        recentOpen={recentOpen}
+        recentSessionCards={recentSessionCards}
+        searchQuery={sidebarSearch}
+        workspaceName={workspaceName}
       />
       <WorkspaceChrome
         activeTab={activeTab}
@@ -4938,10 +5044,18 @@ function PrototypeWorkspace({
         onToggleChat={() => setChatOpen((value) => !value)}
         onTabChange={setActiveTab}
       />
-      <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden p-2 lg:flex-row">
+      <div
+        ref={workspaceSplitRef}
+        className="flex min-h-0 flex-1 flex-col overflow-hidden bg-white lg:flex-row"
+        style={
+          {
+            "--chat-panel-width": `${chatPanelWidth}px`,
+          } as React.CSSProperties
+        }
+      >
         <div
           className={cn(
-            "h-[42vh] min-h-[360px] overflow-hidden rounded-[1rem] border border-border bg-white lg:h-full",
+            "h-[42vh] min-h-[360px] w-full overflow-hidden bg-white lg:h-full lg:w-[var(--chat-panel-width)] lg:shrink-0",
             !chatOpen && "hidden lg:block",
           )}
         >
@@ -4965,10 +5079,35 @@ function PrototypeWorkspace({
             prototype={prototype}
             selectedImages={chatImages}
             sendingPrompt={sendingPrompt}
+            showCorrectionControls={showCorrectionControls}
             submittingCorrection={submittingCorrection}
           />
         </div>
-        <main className="min-h-0 flex-1 overflow-auto rounded-[1rem] border border-border bg-card">
+        {chatOpen ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                role="separator"
+                aria-label="Resize chat and preview"
+                aria-orientation="vertical"
+                aria-valuemin={CHAT_PANEL_MIN_WIDTH}
+                aria-valuemax={CHAT_PANEL_MAX_WIDTH}
+                aria-valuenow={chatPanelWidth}
+                className={cn(
+                  "group hidden w-3 shrink-0 cursor-col-resize appearance-none items-center justify-center self-stretch border-0 bg-white p-0 text-muted-foreground shadow-none outline-none transition-colors hover:bg-white hover:text-foreground active:bg-white focus-visible:bg-white focus-visible:text-foreground focus-visible:ring-3 focus-visible:ring-ring/35 lg:flex",
+                  resizingChatPanel && "text-foreground",
+                )}
+                onKeyDown={handleChatResizeKeyDown}
+                onPointerDown={handleChatResizePointerDown}
+              >
+                <GripVertical className="size-3.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="right">Resize panels</TooltipContent>
+          </Tooltip>
+        ) : null}
+        <main className="m-2 min-h-0 flex-1 overflow-auto rounded-[1rem] border border-border bg-card shadow-[0_18px_54px_oklch(0.35_0.03_255_/_0.12)] lg:ml-0">
           <WorkspaceCanvas
             activeTab={activeTab}
             events={runEvents}
@@ -4995,12 +5134,12 @@ function AppShell() {
   const [workspace, setWorkspace] = useState<WorkspaceSummary | null>(null);
   const [repoConnection, setRepoConnection] =
     useState<RepoConnectionData | null>(null);
+  const [sessionCards, setSessionCards] = useState<PrototypeCardData[]>([]);
   const [projectGuide, setProjectGuide] = useState<ProjectGuideData | null>(
     null,
   );
   const [prompt, setPrompt] = useState("");
   const [creatingSession, setCreatingSession] = useState(false);
-  const [sessionCards, setSessionCards] = useState<PrototypeCardData[]>([]);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarMotion, setSidebarMotion] = useState<"smooth" | "instant">(
     "smooth",
@@ -5119,18 +5258,6 @@ function AppShell() {
     () => sessionCards.slice(0, 8),
     [sessionCards],
   );
-  const visibleRecentSessionCards = useMemo(() => {
-    const normalizedQuery = sidebarSearch.trim().toLowerCase();
-
-    if (!normalizedQuery) {
-      return recentSessionCards;
-    }
-
-    return recentSessionCards.filter((card) =>
-      card.title.toLowerCase().includes(normalizedQuery),
-    );
-  }, [recentSessionCards, sidebarSearch]);
-
   const sidebarTransition =
     sidebarMotion === "smooth"
       ? "duration-200 ease-[cubic-bezier(0.32,0.72,0,1)]"
@@ -5141,8 +5268,13 @@ function AppShell() {
       <DashboardSidebarOverlay
         open={mobileSidebarOpen}
         onClose={() => setMobileSidebarOpen(false)}
+        onRecentOpenChange={setRecentOpen}
+        onSearchChange={setSidebarSearch}
+        recentOpen={recentOpen}
         recentSessionCards={recentSessionCards}
+        searchQuery={sidebarSearch}
         onSelectPrototype={handleSelectPrototype}
+        workspaceName={workspace?.name ?? "Archetype"}
       />
       <aside
         className={cn(
@@ -5152,86 +5284,17 @@ function AppShell() {
         )}
       >
         {sidebarCollapsed ? null : (
-          <>
-            <div className="flex items-center px-2">
-              <div className="flex items-center gap-2">
-                <Avatar className="size-7 border border-border">
-                  <AvatarFallback className="bg-[oklch(0.86_0.045_255)] text-xs font-semibold text-[oklch(0.28_0.08_270)]">
-                    A
-                  </AvatarFallback>
-                </Avatar>
-                <span className="truncate text-sm font-semibold">
-                  {workspace?.name ?? "Archetype"}
-                </span>
-              </div>
-            </div>
-
-            <div className="relative mt-5">
-            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              className="h-9 rounded-full border-transparent bg-background/65 pl-9 shadow-none"
-              placeholder="Search"
-              value={sidebarSearch}
-              onChange={(event) => setSidebarSearch(event.target.value)}
-            />
-            </div>
-
-            <nav className="mt-3 space-y-1">
-              <SidebarItem icon={LayoutDashboard} label="Prototypes" active />
-            </nav>
-
-            <button
-              className="mt-5 flex w-full items-center justify-between px-2 text-sm font-medium text-muted-foreground"
-              onClick={() => setRecentOpen((value) => !value)}
-              type="button"
-            >
-              Recent
-              <ChevronDown
-                className={cn(
-                  "size-4 transition-transform",
-                  !recentOpen && "-rotate-90",
-                )}
-              />
-            </button>
-            {recentOpen ? (
-              <div className="mt-2 space-y-1">
-                {visibleRecentSessionCards.length > 0 ? (
-                  visibleRecentSessionCards.map((card) => (
-                    <Button
-                      key={card.id}
-                      variant="ghost"
-                      className="h-8 w-full justify-start gap-2 truncate rounded-xl px-3 text-[0.85rem]"
-                      onClick={() => handleSelectPrototype(card)}
-                      type="button"
-                    >
-                      <span className="size-2 rounded-full bg-[var(--codex-blue)]" />
-                      <span className="truncate">{card.title}</span>
-                    </Button>
-                  ))
-                ) : (
-                  <p className="px-3 py-2 text-xs text-muted-foreground">
-                    {sidebarSearch.trim()
-                      ? "No matching sessions."
-                      : "No sessions yet."}
-                  </p>
-                )}
-              </div>
-            ) : null}
-
-            {SHOW_PROJECT_GUIDE_FEATURE ? (
-              <div className="mt-auto rounded-2xl bg-background/45 p-3">
-                <div className="flex items-center gap-2 text-xs font-medium">
-                  <BadgeCheck className="size-3.5 text-[var(--codex-purple)]" />
-                  {projectGuide ? "Project guide ready" : "Project guide pending"}
-                </div>
-                <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                  {projectGuide
-                    ? "Inferred from the connected repo, no design-system cleanup required."
-                    : "Connect and scan a repo to replace demo guide samples."}
-                </p>
-              </div>
-            ) : null}
-          </>
+          <WorkspaceSidebarContent
+            onRecentOpenChange={setRecentOpen}
+            onSearchChange={setSidebarSearch}
+            onSelectPrototype={handleSelectPrototype}
+            projectGuide={projectGuide}
+            recentOpen={recentOpen}
+            recentSessionCards={recentSessionCards}
+            searchQuery={sidebarSearch}
+            showProjectGuide={SHOW_PROJECT_GUIDE_FEATURE}
+            workspaceName={workspace?.name ?? "Archetype"}
+          />
         )}
       </aside>
 
@@ -5343,6 +5406,8 @@ function PrototypeDetailInner({
   const [liveStatus, setLiveStatus] = useState<string | null>(null);
   const [repoConnection, setRepoConnection] =
     useState<RepoConnectionData | null>(null);
+  const [workspace, setWorkspace] = useState<WorkspaceSummary | null>(null);
+  const [sessionCards, setSessionCards] = useState<PrototypeCardData[]>([]);
   const [projectGuide, setProjectGuide] = useState<ProjectGuideData | null>(
     null,
   );
@@ -5429,20 +5494,43 @@ function PrototypeDetailInner({
     void submitPromptForDetail(content, images);
   }, [chatImages, chatPrompt, sendingPrompt, submitPromptForDetail]);
 
+  const handleSelectPrototype = useCallback(
+    (card: PrototypeCardData) => {
+      if (isBackendSession(card)) {
+        router.push(prototypeUrl({ sessionId: card.id, tab: "Preview" }));
+        return;
+      }
+
+      router.push(prototypeUrl({ tab: "Preview" }));
+    },
+    [router],
+  );
+
   useEffect(() => {
     let cancelled = false;
 
     void Promise.all([
+      fetchWorkspaceSummary().catch(() => null),
+      fetchSessionSummaries().catch(() => []),
       fetchRepoConnection().catch(() => null),
       fetchProjectGuide().catch(() => null),
-    ]).then(([nextRepoConnection, nextProjectGuide]) => {
+    ]).then(
+      ([
+        nextWorkspace,
+        nextSessionSummaries,
+        nextRepoConnection,
+        nextProjectGuide,
+      ]) => {
       if (cancelled) {
         return;
       }
 
+      setWorkspace(nextWorkspace);
+      setSessionCards(nextSessionSummaries.map(sessionToPrototypeCard));
       setRepoConnection(nextRepoConnection);
       setProjectGuide(nextProjectGuide);
-    });
+      },
+    );
 
     return () => {
       cancelled = true;
@@ -5694,9 +5782,13 @@ function PrototypeDetailInner({
         onPatchPrototype={patchPrototype}
         prototype={prototype}
         projectGuide={projectGuide}
+        recentSessionCards={sessionCards.slice(0, 8)}
         repoConnection={repoConnection}
         onBack={() => router.push("/")}
+        onSelectPrototype={handleSelectPrototype}
         sendingPrompt={sendingPrompt}
+        showCorrectionControls={false}
+        workspaceName={workspace?.name ?? "Archetype"}
       />
     </main>
   );
