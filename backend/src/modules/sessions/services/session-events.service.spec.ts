@@ -18,7 +18,7 @@ describe('SessionEventsService', () => {
     });
   });
 
-  it('does not leak events between sessions', async () => {
+  it('does not leak events between sessions', () => {
     const service = new SessionEventsService();
     const receivedEvents: unknown[] = [];
     const subscription = service

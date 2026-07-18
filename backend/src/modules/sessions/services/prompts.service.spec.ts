@@ -30,6 +30,18 @@ async function flushAsyncTask(): Promise<void> {
   }
 }
 
+function sessionWithIdMatcher(id: string): ChatSessionEntity {
+  const matcher: unknown = expect.objectContaining({ id });
+
+  return matcher as ChatSessionEntity;
+}
+
+function deltaHandlerMatcher(): (delta: string) => void {
+  const matcher: unknown = expect.any(Function);
+
+  return matcher as (delta: string) => void;
+}
+
 describe('PromptsService', () => {
   const baseSession = {
     id: 'session-id',
@@ -84,9 +96,14 @@ describe('PromptsService', () => {
       buildPrompt: jest.fn().mockResolvedValue('sandbox fork prompt'),
     };
     codexAgentRunnerService = {
-      run: jest.fn().mockImplementation(async ({ onDelta }) => {
-        onDelta?.('codex chunk');
-      }),
+      run: jest
+        .fn()
+        .mockImplementation(
+          ({ onDelta }: { onDelta?: (delta: string) => void }) => {
+            onDelta?.('codex chunk');
+            return Promise.resolve();
+          },
+        ),
     };
     service = new PromptsService(
       sessionRepository as Repository<ChatSessionEntity>,
@@ -129,7 +146,7 @@ describe('PromptsService', () => {
       .mockResolvedValueOnce({
         ...baseSession,
         items: [],
-      } as ChatSessionEntity);
+      });
     messageRepository.create.mockReturnValue(userMessage);
     prototypeItemRepository.findOne.mockResolvedValue(null);
     prototypeItemRepository.create.mockReturnValue(currentItem);
@@ -160,9 +177,7 @@ describe('PromptsService', () => {
     await flushAsyncTask();
 
     expect(sandboxForkPromptService.buildPrompt).toHaveBeenCalledWith({
-      session: expect.objectContaining({
-        id: 'session-id',
-      }),
+      session: sessionWithIdMatcher('session-id'),
       targetKind: 'current',
       userPrompt: 'Tôi cần cải thiện UI phần meeting',
     });
@@ -173,7 +188,7 @@ describe('PromptsService', () => {
     expect(codexAgentRunnerService.run).toHaveBeenCalledWith({
       prompt: 'sandbox fork prompt',
       images: [],
-      onDelta: expect.any(Function),
+      onDelta: deltaHandlerMatcher(),
     });
     expect(eventsService.emit).toHaveBeenCalledWith('session-id', 'ai_delta', {
       delta: 'codex chunk',
@@ -218,7 +233,7 @@ describe('PromptsService', () => {
       .mockResolvedValueOnce({
         ...baseSession,
         items: [],
-      } as ChatSessionEntity);
+      });
     filesystemService.savePromptImages.mockResolvedValue([attachment]);
     messageRepository.create.mockReturnValue({} as ChatMessageEntity);
     prototypeItemRepository.findOne.mockResolvedValue(null);
@@ -245,7 +260,7 @@ describe('PromptsService', () => {
     expect(codexAgentRunnerService.run).toHaveBeenCalledWith({
       prompt: 'sandbox fork prompt',
       images: ['/prototype-root/meeting-feature-a/_uploads/screen.png'],
-      onDelta: expect.any(Function),
+      onDelta: deltaHandlerMatcher(),
     });
   });
 
@@ -276,9 +291,7 @@ describe('PromptsService', () => {
     await flushAsyncTask();
 
     expect(sandboxForkPromptService.buildPrompt).toHaveBeenCalledWith({
-      session: expect.objectContaining({
-        id: 'session-id',
-      }),
+      session: sessionWithIdMatcher('session-id'),
       targetKind: 'new',
       userPrompt: 'Làm UI meeting gọn hơn',
     });
@@ -288,7 +301,7 @@ describe('PromptsService', () => {
     expect(codexAgentRunnerService.run).toHaveBeenCalledWith({
       prompt: 'sandbox fork prompt',
       images: [],
-      onDelta: expect.any(Function),
+      onDelta: deltaHandlerMatcher(),
     });
     expect(prototypeItemRepository.create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -311,7 +324,7 @@ describe('PromptsService', () => {
       .mockResolvedValueOnce({
         ...baseSession,
         items: [],
-      } as ChatSessionEntity);
+      });
     messageRepository.create.mockReturnValue({} as ChatMessageEntity);
     codexAgentRunnerService.run.mockRejectedValue(
       new Error('sandbox fork failed'),
