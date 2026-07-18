@@ -3,9 +3,15 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import "./globals.css";
 
 export const metadata: Metadata = {
+  applicationName: "Archetype",
   title: "Archetype",
   description: "A codebase-native prototype workspace for product teams.",
   manifest: "/site.webmanifest",
+  appleWebApp: {
+    capable: true,
+    title: "Archetype",
+    statusBarStyle: "default",
+  },
   icons: {
     icon: [
       { url: "/favicon.ico" },
