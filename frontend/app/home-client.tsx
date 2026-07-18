@@ -15,6 +15,7 @@ import {
   Eye,
   EyeOff,
   FileCode2,
+  GitBranch,
   Globe2,
   Grid2X2,
   GripVertical,
@@ -96,6 +97,7 @@ import { cn } from "@/lib/utils";
 const API_BASE_URL = (
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8001/api"
 ).replace(/\/$/, "");
+const API_ORIGIN = getUrlOrigin(API_BASE_URL);
 const PROTOTYPE_PREVIEW_ORIGIN = (
   process.env.NEXT_PUBLIC_PROTOTYPE_PREVIEW_ORIGIN ?? "http://localhost:3000"
 ).replace(/\/$/, "");
@@ -106,6 +108,12 @@ const TEST_MODE = ["1", "true", "yes"].includes(
     ""
   ).toLowerCase(),
 );
+const LOCAL_AUTH_BYPASS =
+  process.env.NODE_ENV !== "production" &&
+  ["1", "true", "yes"].includes(
+    (process.env.NEXT_PUBLIC_LOCAL_AUTH_BYPASS ?? "true").toLowerCase(),
+  );
+const AUTH_UNAVAILABLE_MESSAGE = "Auth endpoint unavailable.";
 const DEFAULT_PROTOTYPE_PREVIEW_PATH = "/patrimony";
 const SHOW_PROJECT_GUIDE_FEATURE = false;
 const SHOW_REPO_SELECTOR = true;
@@ -116,6 +124,14 @@ const CHAT_PANEL_MIN_WIDTH = 300;
 const CHAT_PANEL_MAX_WIDTH = 640;
 const PREVIEW_PANEL_MIN_WIDTH = 520;
 const CHAT_PANEL_KEYBOARD_STEP = 24;
+
+function getUrlOrigin(value: string) {
+  try {
+    return new URL(value).origin;
+  } catch {
+    return "";
+  }
+}
 
 function clampNumber(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
@@ -141,6 +157,45 @@ type WorkspaceSummary = {
   status: "ready";
 };
 
+type RuntimeServiceData = {
+  type?: string;
+  version?: string;
+  port?: number;
+};
+
+type RuntimeSpecData = {
+  language?: string[];
+  packageManager?: string;
+  frontend?: {
+    framework?: string;
+    devCommand?: string;
+    port?: number;
+  };
+  backend?: {
+    framework?: string;
+    devCommand?: string;
+    port?: number;
+  };
+  services?: RuntimeServiceData[];
+};
+
+type ProjectData = {
+  id: string;
+  name?: string;
+  repoName?: string;
+  repoFullName?: string;
+  repoUrl?: string;
+  defaultBranch?: string;
+  branch?: string;
+  currentCommitSha?: string | null;
+  workspacePath?: string | null;
+  previewBaseUrl?: string | null;
+  previewOrigin?: string | null;
+  prototypeRoot?: string | null;
+  status?: string;
+  runtimeSpec?: RuntimeSpecData | null;
+};
+
 type AuthPayload = {
   user: {
     id: string;
@@ -162,6 +217,14 @@ type SessionSummary = {
   status: string;
   createdAt: string;
   updatedAt: string;
+  projectId?: string;
+  sessionSlug?: string;
+  branch?: string;
+  baseBranch?: string;
+  previewUrl?: string | null;
+  previewBaseUrl?: string | null;
+  latestRunId?: string | null;
+  lastSuccessfulRunId?: string | null;
 };
 
 type RunSummary = {
@@ -177,11 +240,16 @@ type RunSummary = {
 
 type RepoConnectionData = {
   id?: string;
+  projectId?: string;
   repoFullName?: string;
   branch?: string;
+  defaultBranch?: string;
   currentCommitSha?: string | null;
+  workspacePath?: string | null;
   prototypeRoot?: string;
   previewOrigin?: string;
+  previewBaseUrl?: string | null;
+  runtimeSpec?: RuntimeSpecData | null;
   status: string;
   lastError?: string | null;
 };
@@ -262,6 +330,10 @@ type PrototypeCardData = {
   sessionStatus: string;
   latestRunId?: string | null;
   lastSuccessfulRunId?: string | null;
+  projectId?: string;
+  previewUrl?: string | null;
+  previewBaseUrl?: string | null;
+  runnerStatus?: string | null;
 };
 
 type DashboardSort = "lastEdited" | "systemFit" | "review";
@@ -310,14 +382,43 @@ type SessionLiveEvent =
   | "ai_delta"
   | "current_ready"
   | "new_reloading"
-  | "new_ready";
+  | "new_ready"
+  | "github_connected"
+  | "runtime_analysis_started"
+  | "runtime_spec_generated"
+  | "docker_files_generated"
+  | "local_clone_done"
+  | "services_ready"
+  | "dev_server_ready"
+  | "session_branch_created"
+  | "branch_checked_out"
+  | "code_changed"
+  | "seed_agent_requested"
+  | "seed_thinking"
+  | "seed_schema_detected"
+  | "seed_fixture_generated"
+  | "seed_running"
+  | "seed_record_created"
+  | "seed_validated"
+  | "seed_agent_done"
+  | "preview_ready";
 
 type SessionEventPayload = {
+  branch?: string;
+  baseBranch?: string;
+  command?: string;
   delta?: string;
+  files?: string[];
+  frontendPort?: number;
+  backendPort?: number;
   message?: string;
+  previewBaseUrl?: string;
+  records?: Record<string, unknown>;
   runId?: string;
   status?: string;
   url?: string;
+  workspacePath?: string;
+  [key: string]: unknown;
 };
 
 type RunEventData = {
@@ -564,6 +665,51 @@ const learnedLogs = [
   ["14:48:13.081", "agent", "Demo preview regenerated with correction"],
   ["14:48:13.304", "validation", "Demo fit score updated for narrative only"],
 ];
+
+const RUNNER_PROGRESS_EVENTS = [
+  "github_connected",
+  "runtime_analysis_started",
+  "runtime_spec_generated",
+  "docker_files_generated",
+  "local_clone_done",
+  "services_ready",
+  "dev_server_ready",
+  "session_branch_created",
+  "branch_checked_out",
+  "code_changed",
+  "seed_agent_requested",
+  "seed_thinking",
+  "seed_schema_detected",
+  "seed_fixture_generated",
+  "seed_running",
+  "seed_record_created",
+  "seed_validated",
+  "seed_agent_done",
+  "preview_ready",
+] as const satisfies readonly SessionLiveEvent[];
+
+const READY_SESSION_STATUSES = new Set([
+  "current_ready",
+  "new_ready",
+  "preview_ready",
+  "dev_server_ready",
+  "services_ready",
+  "ready",
+]);
+
+const ERROR_SESSION_STATUSES = new Set([
+  "error",
+  "failed",
+  "cancelled",
+  "timed_out",
+]);
+
+type RunnerVisualState = "idle" | "running" | "ready" | "error";
+
+type PushState = {
+  status: "idle" | "pushing" | "pushed" | "error";
+  message: string | null;
+};
 type WorkspaceTab = (typeof workspaceTabs)[number];
 
 export type InitialWorkspaceState = {
@@ -626,11 +772,11 @@ function formatSessionTime(value: string) {
 }
 
 function mapSessionStatus(status: string): PrototypeCardData["status"] {
-  if (status === "current_ready" || status === "new_ready") {
+  if (READY_SESSION_STATUSES.has(status)) {
     return "Ready";
   }
 
-  if (status === "error") {
+  if (ERROR_SESSION_STATUSES.has(status)) {
     return "Review";
   }
 
@@ -684,6 +830,112 @@ function createLocalSessionSummary(title: string): CreateSessionResponse {
   };
 }
 
+function normalizeProjectRepoName(project: ProjectData) {
+  return (
+    project.repoFullName ??
+    project.repoName ??
+    project.repoUrl?.replace(/^https:\/\/github\.com\//, "") ??
+    project.name ??
+    "Connected repo"
+  );
+}
+
+function projectToRepoConnection(project: ProjectData): RepoConnectionData {
+  return {
+    id: project.id,
+    projectId: project.id,
+    repoFullName: normalizeProjectRepoName(project),
+    branch: project.branch ?? project.defaultBranch ?? "main",
+    defaultBranch: project.defaultBranch,
+    currentCommitSha: project.currentCommitSha ?? null,
+    workspacePath: project.workspacePath ?? null,
+    prototypeRoot: project.prototypeRoot ?? ".",
+    previewOrigin:
+      project.previewOrigin ??
+      normalizePreviewOrigin(project.previewBaseUrl) ??
+      PROTOTYPE_PREVIEW_ORIGIN,
+    previewBaseUrl: project.previewBaseUrl ?? null,
+    runtimeSpec: project.runtimeSpec ?? null,
+    status: project.status ?? "ready",
+    lastError: null,
+  };
+}
+
+function runtimeSpecToProjectGuide(
+  project: ProjectData,
+  runtimeSpec?: RuntimeSpecData | null,
+): ProjectGuideData {
+  const spec = runtimeSpec ?? project.runtimeSpec ?? null;
+  const serviceCount = spec?.services?.length ?? 0;
+
+  return {
+    guide: {
+      id: `runtime-${project.id}`,
+      commitSha: project.currentCommitSha ?? null,
+      generatedAt: new Date().toISOString(),
+      stale: false,
+      content: {
+        summary: {
+          routeCount: 0,
+          componentCount: 0,
+          primitiveCount: 0,
+          scriptCount: Number(Boolean(spec?.frontend?.devCommand)) +
+            Number(Boolean(spec?.backend?.devCommand)),
+          styleSignalCount: serviceCount,
+          envVarCount: 0,
+        },
+        routes: [],
+        components: [],
+        primitives: [],
+        packageScripts: {
+          ...(spec?.frontend?.devCommand
+            ? { frontend: spec.frontend.devCommand }
+            : {}),
+          ...(spec?.backend?.devCommand
+            ? { backend: spec.backend.devCommand }
+            : {}),
+        },
+        styling: [],
+        environment: [],
+      },
+      evidence: {
+        runtimeSpec: spec,
+      },
+      unsupportedPatterns: [],
+    },
+  };
+}
+
+function normalizeSessionSummary(payload: Partial<SessionSummary>): SessionSummary {
+  const now = new Date().toISOString();
+  const title = payload.title?.trim() || "Untitled prototype";
+  const sessionSlug =
+    payload.sessionSlug ??
+    payload.routeSlug ??
+    payload.branch?.split("/").filter(Boolean).at(-1) ??
+    slugifySessionTitle(title);
+  const branch = payload.branch ?? `prototype/${sessionSlug}`;
+  const previewPath = `/chat-sessions/${payload.id ?? sessionSlug}/preview`;
+
+  return {
+    id: payload.id ?? `session-${sessionSlug}`,
+    title,
+    routeSlug: payload.routeSlug ?? sessionSlug,
+    routePath: payload.routePath ?? previewPath,
+    status: payload.status ?? "session_created",
+    createdAt: payload.createdAt ?? now,
+    updatedAt: payload.updatedAt ?? payload.createdAt ?? now,
+    projectId: payload.projectId,
+    sessionSlug,
+    branch,
+    baseBranch: payload.baseBranch,
+    previewUrl: payload.previewUrl ?? null,
+    previewBaseUrl: payload.previewBaseUrl ?? null,
+    latestRunId: payload.latestRunId ?? null,
+    lastSuccessfulRunId: payload.lastSuccessfulRunId ?? null,
+  };
+}
+
 function getPrototypeItemUrl(
   routePath: string,
   kind: PrototypeItemSummary["kind"],
@@ -706,6 +958,14 @@ function normalizePreviewAddress(value: string) {
     return trimmedValue;
   }
 
+  if (trimmedValue.startsWith("/api/")) {
+    return `${API_ORIGIN}${trimmedValue}`;
+  }
+
+  if (trimmedValue.startsWith("/chat-sessions/")) {
+    return `${API_BASE_URL}${trimmedValue}`;
+  }
+
   if (trimmedValue.startsWith("/")) {
     return `${PROTOTYPE_PREVIEW_ORIGIN}${trimmedValue}`;
   }
@@ -715,6 +975,20 @@ function normalizePreviewAddress(value: string) {
   }
 
   return `${PROTOTYPE_PREVIEW_ORIGIN}/${trimmedValue.replace(/^\/+/, "")}`;
+}
+
+function isApiPreviewProxy(previewUrl: string | null) {
+  const parsedUrl = parsePreviewUrl(previewUrl);
+
+  if (!parsedUrl) {
+    return false;
+  }
+
+  return (
+    parsedUrl.origin === API_ORIGIN &&
+    parsedUrl.pathname.includes("/chat-sessions/") &&
+    parsedUrl.pathname.endsWith("/preview")
+  );
 }
 
 function parsePreviewUrl(value: string | null) {
@@ -788,6 +1062,115 @@ function formatPreviewHealthStatus(status: string | null | undefined) {
   return status
     .replace(/_/g, " ")
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function formatSessionEventMessage(
+  eventName: SessionLiveEvent,
+  payload: SessionEventPayload,
+) {
+  if (payload.message) {
+    return payload.message;
+  }
+
+  if (eventName === "runtime_spec_generated") {
+    const frontend = String(payload.frontend ?? payload.framework ?? "frontend");
+    const backend = String(payload.backend ?? "");
+    const services = Array.isArray(payload.services)
+      ? payload.services.join(", ")
+      : "";
+
+    return [
+      `Runtime spec generated for ${frontend}`,
+      backend ? `backend ${backend}` : "",
+      services ? `services ${services}` : "",
+    ]
+      .filter(Boolean)
+      .join(", ");
+  }
+
+  if (eventName === "docker_files_generated" && Array.isArray(payload.files)) {
+    return `Docker files generated: ${payload.files.join(", ")}`;
+  }
+
+  if (eventName === "local_clone_done" && payload.workspacePath) {
+    return `Repository cloned at ${payload.workspacePath}`;
+  }
+
+  if (eventName === "services_ready") {
+    return "Local runner services are ready.";
+  }
+
+  if (eventName === "dev_server_ready") {
+    return "Preview dev server is ready.";
+  }
+
+  if (eventName === "session_branch_created" && payload.branch) {
+    return `Created session branch ${payload.branch}.`;
+  }
+
+  if (eventName === "branch_checked_out" && payload.branch) {
+    return `Checked out ${payload.branch}.`;
+  }
+
+  if (eventName === "code_changed" && Array.isArray(payload.files)) {
+    return `Code changed: ${payload.files.join(", ")}`;
+  }
+
+  if (eventName === "seed_agent_requested") {
+    return `Seed data requested${payload.command ? `: ${payload.command}` : ""}.`;
+  }
+
+  if (eventName === "seed_schema_detected" && Array.isArray(payload.models)) {
+    return `Seed schema detected: ${payload.models.join(", ")}`;
+  }
+
+  if (eventName === "seed_record_created") {
+    return `Seed record created${payload.model ? `: ${String(payload.model)}` : ""}.`;
+  }
+
+  if (eventName === "seed_agent_done") {
+    return "Seed data is ready.";
+  }
+
+  if (eventName === "preview_ready" && payload.url) {
+    return `Preview ready: ${payload.url}`;
+  }
+
+  return eventName.replace(/_/g, " ");
+}
+
+function sessionEventToRunEvent(
+  sessionId: string,
+  eventName: SessionLiveEvent,
+  payload: SessionEventPayload,
+): RunEventData {
+  const createdAt = new Date().toISOString();
+
+  return {
+    id: `${sessionId}:${eventName}:${createdAt}:${Math.random().toString(36).slice(2)}`,
+    runId: payload.runId ?? sessionId,
+    type: eventName,
+    source: eventName.startsWith("seed_")
+      ? "seed"
+      : eventName.includes("runtime") ||
+          eventName.includes("docker") ||
+          eventName.includes("services") ||
+          eventName.includes("server")
+        ? "runner"
+        : "session",
+    message: formatSessionEventMessage(eventName, payload),
+    payload,
+    createdAt,
+  };
+}
+
+function sessionEventToSystemMessage(event: RunEventData): ChatMessageData {
+  return {
+    id: `system-${event.id}`,
+    role: "system",
+    content: event.message ?? event.type,
+    createdAt: event.createdAt,
+  };
 }
 
 function validatePreviewLocally(
@@ -999,6 +1382,38 @@ async function apiFetch(path: string, init: RequestInit = {}) {
   });
 }
 
+function isMissingEndpointResponse(response: Response) {
+  return response.status === 404 || response.status === 405;
+}
+
+async function apiFetchJsonWithFallback<T>(
+  primaryPath: string,
+  fallbackPath: string | null,
+  init: RequestInit = {},
+) {
+  const primaryResponse = await apiFetch(primaryPath, init);
+
+  if (primaryResponse.ok) {
+    return (await primaryResponse.json()) as T;
+  }
+
+  if (!fallbackPath || !isMissingEndpointResponse(primaryResponse)) {
+    const errorText = await primaryResponse.text().catch(() => "");
+
+    throw new Error(errorText || `Request failed with ${primaryResponse.status}`);
+  }
+
+  const fallbackResponse = await apiFetch(fallbackPath, init);
+
+  if (!fallbackResponse.ok) {
+    const errorText = await fallbackResponse.text().catch(() => "");
+
+    throw new Error(errorText || `Request failed with ${fallbackResponse.status}`);
+  }
+
+  return (await fallbackResponse.json()) as T;
+}
+
 async function fetchCurrentActor() {
   const response = await apiFetch("/auth/me", {
     cache: "no-store",
@@ -1011,14 +1426,54 @@ async function fetchCurrentActor() {
   return (await response.json()) as AuthPayload;
 }
 
-async function loginPrivateBeta(email: string, passcode: string) {
-  const response = await apiFetch("/auth/login", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
+function createLocalAuthPayload(email: string): AuthPayload {
+  return {
+    user: {
+      id: "local-dev-user",
+      email,
+      displayName: "Founder",
     },
-    body: JSON.stringify({ email, passcode }),
-  });
+    workspace: {
+      ...MOCK_WORKSPACE,
+      id: "local-dev-workspace",
+      name: "Archetype",
+    },
+    membership: {
+      id: "local-dev-membership",
+      role: "owner",
+    },
+  };
+}
+
+function isAuthUnavailableError(error: unknown) {
+  return (
+    error instanceof TypeError ||
+    (error instanceof Error && error.message === AUTH_UNAVAILABLE_MESSAGE)
+  );
+}
+
+async function loginPrivateBeta(email: string, passcode: string) {
+  let response: Response;
+
+  try {
+    response = await apiFetch("/auth/login", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ email, passcode }),
+    });
+  } catch (error) {
+    if (error instanceof TypeError) {
+      throw error;
+    }
+
+    throw new Error("Private beta login failed.");
+  }
+
+  if (response.status === 404) {
+    throw new Error(AUTH_UNAVAILABLE_MESSAGE);
+  }
 
   if (!response.ok) {
     throw new Error("Invalid private beta credentials.");
@@ -1067,14 +1522,34 @@ async function fetchRepoConnection() {
   if (TEST_MODE) {
     return {
       id: "mock-repo",
+      projectId: "mock-repo",
       repoFullName: "mock/mock-frontend",
       branch: "main",
       currentCommitSha: "demo",
       prototypeRoot: "/mock/prototypes",
       previewOrigin: PROTOTYPE_PREVIEW_ORIGIN,
+      previewBaseUrl: PROTOTYPE_PREVIEW_ORIGIN,
       status: "ready",
       lastError: null,
     } satisfies RepoConnectionData;
+  }
+
+  const projectsResponse = await apiFetch("/projects", {
+    cache: "no-store",
+  });
+
+  if (projectsResponse.ok) {
+    const payload = (await projectsResponse.json()) as
+      | { items?: ProjectData[] }
+      | ProjectData[];
+    const projects = Array.isArray(payload) ? payload : payload.items ?? [];
+    const project = projects[0];
+
+    return project ? projectToRepoConnection(project) : null;
+  }
+
+  if (!isMissingEndpointResponse(projectsResponse)) {
+    throw new Error(`Projects request failed with ${projectsResponse.status}`);
   }
 
   const response = await apiFetch("/repo-connections/current", {
@@ -1173,6 +1648,63 @@ async function saveRepoEnvironment(variables: SaveRepoEnvironmentInput[]) {
 }
 
 async function connectRepoAndScan(input: RepoConnectionInput) {
+  const projectResponse = await apiFetch("/projects", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      branch: input.branch,
+      defaultBranch: input.branch,
+      previewOrigin: input.previewOrigin,
+      prototypeRoot: input.prototypeRoot,
+      repoUrl: input.repoUrl,
+    }),
+  });
+
+  if (projectResponse.ok) {
+    const project = (await projectResponse.json()) as ProjectData;
+    const analysisResponse = await apiFetch(
+      `/projects/${project.id}/analyze-runtime`,
+      {
+        method: "POST",
+      },
+    );
+    const analysisPayload = analysisResponse.ok
+      ? ((await analysisResponse.json()) as
+          | { project?: ProjectData; runtimeSpec?: RuntimeSpecData }
+          | RuntimeSpecData)
+      : null;
+    const runtimeSpec =
+      analysisPayload && "runtimeSpec" in analysisPayload
+        ? analysisPayload.runtimeSpec
+        : analysisPayload && "frontend" in analysisPayload
+          ? analysisPayload
+          : null;
+    const nextProject =
+      analysisPayload && "project" in analysisPayload && analysisPayload.project
+        ? analysisPayload.project
+        : {
+            ...project,
+            runtimeSpec,
+          };
+
+    await apiFetch(`/projects/${nextProject.id}/runner/start`, {
+      method: "POST",
+    }).catch(() => null);
+
+    return {
+      connection: projectToRepoConnection(nextProject),
+      guide: runtimeSpecToProjectGuide(nextProject, runtimeSpec),
+    };
+  }
+
+  if (!isMissingEndpointResponse(projectResponse)) {
+    const errorText = await projectResponse.text().catch(() => "");
+
+    throw new Error(errorText || `Project connection failed with ${projectResponse.status}`);
+  }
+
   const connectionResponse = await apiFetch("/repo-connections", {
     method: "POST",
     headers: {
@@ -1218,9 +1750,33 @@ async function scanCurrentRepo() {
   return (await response.json()) as ProjectGuideData;
 }
 
-async function fetchSessionSummaries() {
+async function fetchSessionSummaries(projectId?: string | null) {
   if (TEST_MODE) {
     return getMockSessions();
+  }
+
+  if (projectId) {
+    const projectSessionsResponse = await apiFetch(
+      `/projects/${projectId}/chat-sessions`,
+      {
+        cache: "no-store",
+      },
+    );
+
+    if (projectSessionsResponse.ok) {
+      const payload = (await projectSessionsResponse.json()) as
+        | { items?: Partial<SessionSummary>[] }
+        | Partial<SessionSummary>[];
+      const items = Array.isArray(payload) ? payload : payload.items ?? [];
+
+      return items.map(normalizeSessionSummary);
+    }
+
+    if (!isMissingEndpointResponse(projectSessionsResponse)) {
+      throw new Error(
+        `Chat sessions request failed with ${projectSessionsResponse.status}`,
+      );
+    }
   }
 
   const response = await apiFetch("/sessions", {
@@ -1233,7 +1789,7 @@ async function fetchSessionSummaries() {
 
   const payload = (await response.json()) as SessionListResponse;
 
-  return payload.items;
+  return payload.items.map(normalizeSessionSummary);
 }
 
 function sessionToPrototypeCard(session: SessionSummary): PrototypeCardData {
@@ -1243,17 +1799,25 @@ function sessionToPrototypeCard(session: SessionSummary): PrototypeCardData {
     added: 0,
     removed: 0,
     title: session.title,
-    branch: `prototype/${session.routeSlug}`,
+    branch: session.branch ?? `prototype/${session.routeSlug}`,
     status: mapSessionStatus(session.status),
     owner: "AI",
     time: formatSessionTime(session.updatedAt || session.createdAt),
     fit: "--",
     learned: "Project guide inferred",
-    notes: `Session route: ${session.routePath}`,
-    preview: session.routeSlug,
+    notes: session.branch
+      ? `Session branch: ${session.branch}`
+      : `Session route: ${session.routePath}`,
+    preview: session.previewUrl ?? session.routeSlug,
     routePath: session.routePath,
     routeSlug: session.routeSlug,
     sessionStatus: session.status,
+    latestRunId: session.latestRunId ?? null,
+    lastSuccessfulRunId: session.lastSuccessfulRunId ?? null,
+    projectId: session.projectId,
+    previewBaseUrl: session.previewBaseUrl ?? null,
+    previewUrl: session.previewUrl ?? null,
+    runnerStatus: session.status,
   };
 }
 
@@ -1272,7 +1836,9 @@ function applySessionDetailToCard(
     ...card,
     title: detail.title,
     status: mapSessionStatus(detail.status),
-    notes: newPreview
+    notes: card.branch
+      ? `Session branch: ${card.branch}`
+      : newPreview
       ? `New preview: ${newPreview}`
       : currentPreview
         ? `Current preview: ${currentPreview}`
@@ -1283,6 +1849,8 @@ function applySessionDetailToCard(
     latestRunId: detail.latestRun?.id ?? card.latestRunId ?? null,
     lastSuccessfulRunId:
       detail.lastSuccessfulRun?.id ?? card.lastSuccessfulRunId ?? null,
+    previewUrl: runPreview ?? newPreview ?? currentPreview ?? card.previewUrl,
+    runnerStatus: detail.status,
   };
 }
 
@@ -1312,6 +1880,10 @@ function sessionDetailToPrototypeCard(
       sessionStatus: detail.status,
       latestRunId: detail.latestRun?.id ?? null,
       lastSuccessfulRunId: detail.lastSuccessfulRun?.id ?? null,
+      previewUrl: detail.lastSuccessfulRun?.previewUrl ??
+        detail.latestRun?.previewUrl ??
+        null,
+      runnerStatus: detail.status,
     },
     detail,
   );
@@ -1351,15 +1923,13 @@ async function fetchSessionDetail(sessionId: string) {
     } satisfies SessionDetailResponse;
   }
 
-  const response = await apiFetch(`/sessions/${sessionId}`, {
-    cache: "no-store",
-  });
-
-  if (!response.ok) {
-    throw new Error(`Session detail request failed with ${response.status}`);
-  }
-
-  return (await response.json()) as SessionDetailResponse;
+  return apiFetchJsonWithFallback<SessionDetailResponse>(
+    `/chat-sessions/${sessionId}`,
+    `/sessions/${sessionId}`,
+    {
+      cache: "no-store",
+    },
+  );
 }
 
 async function fetchSessionMessages(sessionId: string) {
@@ -1367,15 +1937,13 @@ async function fetchSessionMessages(sessionId: string) {
     return readMockMessages(sessionId);
   }
 
-  const response = await apiFetch(`/sessions/${sessionId}/messages`, {
-    cache: "no-store",
-  });
-
-  if (!response.ok) {
-    throw new Error(`Messages request failed with ${response.status}`);
-  }
-
-  const payload = (await response.json()) as SessionMessagesResponse;
+  const payload = await apiFetchJsonWithFallback<SessionMessagesResponse>(
+    `/chat-sessions/${sessionId}/messages`,
+    `/sessions/${sessionId}/messages`,
+    {
+      cache: "no-store",
+    },
+  );
 
   return payload.items;
 }
@@ -1427,21 +1995,15 @@ async function submitSessionPrompt(
     body.append("images", image);
   });
 
-  const response = await apiFetch(`/sessions/${sessionId}/prompts`, {
-    method: "POST",
-    body,
-  });
-
-  if (!response.ok) {
-    throw new Error(`Submit prompt failed with ${response.status}`);
-  }
-
-  return (await response.json()) as {
+  return apiFetchJsonWithFallback<{
     accepted: true;
     sessionId: string;
     runId: string;
     status: string;
-  };
+  }>(`/chat-sessions/${sessionId}/chat`, `/sessions/${sessionId}/prompts`, {
+    method: "POST",
+    body,
+  });
 }
 
 async function fetchRunHandoff(runId: string) {
@@ -1490,6 +2052,19 @@ async function retryRun(runId: string) {
   }
 
   return (await response.json()) as RunSummary;
+}
+
+async function pushChatSession(sessionId: string) {
+  return apiFetchJsonWithFallback<{
+    branch?: string;
+    commitSha?: string;
+    pushed?: boolean;
+    remoteUrl?: string;
+    status?: string;
+    message?: string;
+  }>(`/chat-sessions/${sessionId}/push`, null, {
+    method: "POST",
+  });
 }
 
 async function fetchPreviewHealth(
@@ -1640,7 +2215,7 @@ async function fetchLearnedRules(status?: LearnedRuleData["status"]) {
   return ((await response.json()) as { items: LearnedRuleData[] }).items;
 }
 
-async function createSession(title: string) {
+async function createSession(title: string, projectId?: string | null) {
   if (TEST_MODE) {
     const session = {
       ...createLocalSessionSummary(title),
@@ -1652,19 +2227,37 @@ async function createSession(title: string) {
     return session;
   }
 
-  const response = await apiFetch("/sessions", {
+  const init: RequestInit = {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ title }),
-  });
+  };
 
-  if (!response.ok) {
-    throw new Error(`Create session failed with ${response.status}`);
+  if (projectId) {
+    const payload = await apiFetchJsonWithFallback<Partial<CreateSessionResponse>>(
+      `/projects/${projectId}/chat-sessions`,
+      "/sessions",
+      init,
+    );
+
+    return {
+      ...normalizeSessionSummary(payload),
+      items: [],
+    } satisfies CreateSessionResponse;
   }
 
-  return (await response.json()) as CreateSessionResponse;
+  const payload = await apiFetchJsonWithFallback<Partial<CreateSessionResponse>>(
+    "/chat-sessions",
+    "/sessions",
+    init,
+  );
+
+  return {
+    ...normalizeSessionSummary(payload),
+    items: [],
+  } satisfies CreateSessionResponse;
 }
 
 function HeroLogo() {
@@ -1676,6 +2269,19 @@ function HeroLogo() {
       height={76}
       priority
       className="size-16 shrink-0 drop-shadow-[0_22px_44px_oklch(0.5_0.24_269_/_0.18)] sm:size-[76px]"
+    />
+  );
+}
+
+function WhiteHeroLogo() {
+  return (
+    <Image
+      src="/logo_archetype_white.svg"
+      alt="Archetype logo"
+      width={104}
+      height={104}
+      priority
+      className="size-24 drop-shadow-[0_26px_72px_oklch(0.12_0.035_260_/_0.36)] sm:size-32"
     />
   );
 }
@@ -1732,6 +2338,13 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       setActor(await loginPrivateBeta(email, passcode));
       setPasscode("");
     } catch (loginError) {
+      if (LOCAL_AUTH_BYPASS && isAuthUnavailableError(loginError)) {
+        setActor(createLocalAuthPayload(email));
+        setPasscode("");
+        setError(null);
+        return;
+      }
+
       setError(
         loginError instanceof Error
           ? loginError.message
@@ -1755,55 +2368,67 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <main className="grid min-h-screen place-items-center bg-[oklch(0.965_0_0)] px-4 text-foreground">
-      <form
-        className="w-full max-w-sm rounded-2xl border border-border bg-card p-5 shadow-sm"
-        onSubmit={handleLogin}
-      >
-        <div className="flex items-center gap-3">
-          <HeroLogo />
-          <div>
-            <h1 className="text-base font-semibold">Private beta</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Sign in to your Archetype workspace.
+    <main className="grid min-h-screen bg-card text-foreground lg:grid-cols-2">
+      <section className="flex min-h-screen items-center justify-center px-6 py-12 sm:px-10 lg:px-16">
+        <form className="w-full max-w-[360px]" onSubmit={handleLogin}>
+          <div className="mb-10">
+            <h1 className="text-2xl font-semibold tracking-normal text-foreground">
+              Sign in
+            </h1>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+              Enter your Archetype private beta account.
             </p>
           </div>
-        </div>
-        <div className="mt-5 space-y-3">
-          <label className="block text-sm font-medium">
-            Email
-            <Input
-              className="mt-1.5 h-10"
-              type="email"
-              autoComplete="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-            />
-          </label>
-          <label className="block text-sm font-medium">
-            Passcode
-            <Input
-              className="mt-1.5 h-10"
-              type="password"
-              autoComplete="current-password"
-              value={passcode}
-              onChange={(event) => setPasscode(event.target.value)}
-            />
-          </label>
-        </div>
-        {error ? (
-          <div className="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-            {error}
+          <div className="space-y-4">
+            <label className="block text-sm font-medium">
+              Account
+              <Input
+                className="mt-2 h-11 rounded-lg border-input bg-background"
+                type="email"
+                autoComplete="username"
+                placeholder="founder@archetype.dev"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+              />
+            </label>
+            <label className="block text-sm font-medium">
+              Password
+              <Input
+                className="mt-2 h-11 rounded-lg border-input bg-background"
+                type="password"
+                autoComplete="current-password"
+                placeholder="Enter your password"
+                value={passcode}
+                onChange={(event) => setPasscode(event.target.value)}
+              />
+            </label>
           </div>
-        ) : null}
-        <Button
-          className="mt-5 w-full rounded-full"
-          disabled={submitting || !email.trim() || !passcode.trim()}
-          type="submit"
-        >
-          {submitting ? "Signing in" : "Continue"}
-        </Button>
-      </form>
+          {error ? (
+            <div className="mt-5 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+              {error}
+            </div>
+          ) : null}
+          <Button
+            className="auth-gradient-button mt-7 h-11 w-full rounded-lg text-[oklch(0.985_0.006_255)] disabled:opacity-55"
+            disabled={submitting || !email.trim() || !passcode.trim()}
+            type="submit"
+          >
+            {submitting ? "Signing in" : "Sign in"}
+          </Button>
+        </form>
+      </section>
+      <section
+        className="relative hidden min-h-screen overflow-hidden bg-[length:cover] bg-center lg:flex lg:items-center lg:justify-center"
+        style={{ backgroundImage: 'url("/archetype_bg_signin_image.jpg")' }}
+      >
+        <div className="absolute inset-0 bg-[oklch(0.12_0.018_260_/_0.18)]" />
+        <div className="relative z-10 flex items-center gap-5">
+          <WhiteHeroLogo />
+          <span className="text-7xl font-semibold leading-none tracking-normal text-[oklch(0.985_0.006_255)] drop-shadow-[0_26px_72px_oklch(0.12_0.035_260_/_0.36)] xl:text-8xl">
+            Archetype
+          </span>
+        </div>
+      </section>
     </main>
   );
 }
@@ -3794,6 +4419,65 @@ function DashboardSidebarOverlay({
   );
 }
 
+function getRunnerVisualState(status: string | null | undefined): RunnerVisualState {
+  if (!status || status === "session_created") {
+    return "idle";
+  }
+
+  if (READY_SESSION_STATUSES.has(status)) {
+    return "ready";
+  }
+
+  if (ERROR_SESSION_STATUSES.has(status)) {
+    return "error";
+  }
+
+  return "running";
+}
+
+function formatRunnerLabel(status: string | null | undefined) {
+  if (!status || status === "session_created") {
+    return "Runner idle";
+  }
+
+  if (status === "processing") {
+    return "Runner working";
+  }
+
+  return status
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function RunnerStatusPill({ status }: { status: string | null | undefined }) {
+  const visualState = getRunnerVisualState(status);
+
+  return (
+    <span className="hidden h-7 items-center gap-2 rounded-full border border-border bg-white px-2.5 text-xs font-medium text-muted-foreground sm:inline-flex">
+      <span
+        className={cn(
+          "h-1.5 w-8 overflow-hidden rounded-full bg-muted",
+          visualState === "running" && "bg-[oklch(0.88_0.07_250)]",
+          visualState === "ready" && "bg-[oklch(0.86_0.08_155)]",
+          visualState === "error" && "bg-[oklch(0.9_0.08_28)]",
+        )}
+      >
+        <span
+          className={cn(
+            "block h-full rounded-full transition-all duration-200",
+            visualState === "idle" && "w-1/4 bg-muted-foreground/40",
+            visualState === "running" &&
+              "w-2/3 animate-pulse bg-[var(--codex-blue)]",
+            visualState === "ready" && "w-full bg-[var(--live)]",
+            visualState === "error" && "w-full bg-destructive",
+          )}
+        />
+      </span>
+      {formatRunnerLabel(status)}
+    </span>
+  );
+}
+
 function WorkspaceChrome({
   activeTab,
   addressValue,
@@ -3803,10 +4487,13 @@ function WorkspaceChrome({
   learned,
   previewUrl,
   prototype,
+  pushState,
+  runnerStatus,
   onAddressChange,
   onAddressSubmit,
   onBack,
   onCancelRun,
+  onPushCode,
   onReloadPreview,
   onRetryRun,
   onToggleSidebar,
@@ -3821,10 +4508,13 @@ function WorkspaceChrome({
   learned: boolean;
   previewUrl: string | null;
   prototype: PrototypeCardData;
+  pushState: PushState;
+  runnerStatus: string | null | undefined;
   onAddressChange: (value: string) => void;
   onAddressSubmit: () => void;
   onBack: () => void;
   onCancelRun: () => void;
+  onPushCode: () => void;
   onReloadPreview: () => void;
   onRetryRun: () => void;
   onToggleSidebar: () => void;
@@ -3909,6 +4599,7 @@ function WorkspaceChrome({
         <h2 className="truncate px-1 text-sm font-semibold sm:max-w-64">
           {prototype.title}
         </h2>
+        <RunnerStatusPill status={runnerStatus} />
       </div>
 
       <div className="order-3 grid w-full min-w-0 grid-cols-5 gap-1 lg:order-none lg:flex lg:w-auto lg:items-center lg:overflow-x-auto">
@@ -3965,6 +4656,34 @@ function WorkspaceChrome({
             <Globe2 className="size-4" />
           )}
         </form>
+      </div>
+
+      <div className="ml-auto flex items-center gap-2">
+        {pushState.message ? (
+          <span
+            className={cn(
+              "hidden max-w-48 truncate text-xs text-muted-foreground xl:inline",
+              pushState.status === "error" && "text-destructive",
+            )}
+          >
+            {pushState.message}
+          </span>
+        ) : null}
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 rounded-full bg-white"
+          disabled={!detailSessionId || pushState.status === "pushing"}
+          onClick={onPushCode}
+          type="button"
+        >
+          {pushState.status === "pushing" ? (
+            <RefreshCcw className="size-3.5 animate-spin" />
+          ) : (
+            <GitBranch className="size-3.5" />
+          )}
+          {pushState.status === "pushing" ? "Pushing" : "Push code"}
+        </Button>
       </div>
 
     </div>
@@ -4367,16 +5086,35 @@ function resolvePrototypePreviewUrl(prototype?: PrototypeCardData | null) {
     return null;
   }
 
+  const candidatePreview =
+    prototype.previewUrl ?? prototype.preview ?? prototype.previewBaseUrl;
+
+  if (candidatePreview && /^https?:\/\//.test(candidatePreview)) {
+    return candidatePreview;
+  }
+
+  if (candidatePreview?.startsWith("/api/")) {
+    return `${API_ORIGIN}${candidatePreview}`;
+  }
+
+  if (candidatePreview?.startsWith("/chat-sessions/")) {
+    return `${API_BASE_URL}${candidatePreview}`;
+  }
+
+  if (candidatePreview?.startsWith("/")) {
+    return `${PROTOTYPE_PREVIEW_ORIGIN}${candidatePreview}`;
+  }
+
+  if (isBackendSession(prototype)) {
+    return `${API_BASE_URL}/chat-sessions/${prototype.id}/preview`;
+  }
+
   if (/^https?:\/\//.test(prototype.preview)) {
     return prototype.preview;
   }
 
   if (prototype.preview.startsWith("/")) {
     return `${PROTOTYPE_PREVIEW_ORIGIN}${prototype.preview}`;
-  }
-
-  if (isBackendSession(prototype) && prototype.routePath.startsWith("/")) {
-    return `${PROTOTYPE_PREVIEW_ORIGIN}${getPrototypeItemUrl(prototype.routePath, "current")}`;
   }
 
   return null;
@@ -5483,6 +6221,7 @@ function PrototypeWorkspace({
   projectGuide,
   recentSessionCards,
   repoConnection,
+  sessionEvents,
   onBack,
   onSelectPrototype,
   sendingPrompt,
@@ -5508,6 +6247,7 @@ function PrototypeWorkspace({
   projectGuide: ProjectGuideData | null;
   recentSessionCards: PrototypeCardData[];
   repoConnection: RepoConnectionData | null;
+  sessionEvents: RunEventData[];
   onBack: () => void;
   onSelectPrototype: (card: PrototypeCardData) => void;
   sendingPrompt: boolean;
@@ -5560,11 +6300,32 @@ function PrototypeWorkspace({
   const canRetryRun = ["error", "failed", "cancelled", "timed_out"].includes(
     prototype.sessionStatus,
   );
+  const previewUsesBackendProxy = isApiPreviewProxy(previewUrl);
+  const combinedEvents = useMemo(() => {
+    const seenIds = new Set<string>();
+
+    return [...sessionEvents, ...runEvents].filter((event) => {
+      if (seenIds.has(event.id)) {
+        return false;
+      }
+
+      seenIds.add(event.id);
+      return true;
+    });
+  }, [runEvents, sessionEvents]);
+  const runnerStatus =
+    sessionEvents[0]?.type ?? prototype.runnerStatus ?? prototype.sessionStatus;
+  const [pushState, setPushState] = useState<PushState>({
+    status: "idle",
+    message: null,
+  });
   const expectedPreviewOrigin = normalizePreviewOrigin(
-    repoConnection?.previewOrigin ?? PROTOTYPE_PREVIEW_ORIGIN,
+    previewUsesBackendProxy
+      ? null
+      : repoConnection?.previewOrigin ?? PROTOTYPE_PREVIEW_ORIGIN,
   );
   const expectedPreviewRoute = normalizeExpectedPreviewRoute(
-    prototype.routePath,
+    previewUsesBackendProxy ? null : prototype.routePath,
   );
 
   const resizeChatPanel = useCallback((clientX: number) => {
@@ -5744,6 +6505,33 @@ function PrototypeWorkspace({
         );
       });
   }, [activeRunId, onChatErrorChange, onLiveStatusChange, onPatchPrototype]);
+
+  const handlePushCode = useCallback(() => {
+    if (!detailSessionId || pushState.status === "pushing") {
+      return;
+    }
+
+    setPushState({
+      status: "pushing",
+      message: "Pushing branch...",
+    });
+
+    void pushChatSession(detailSessionId)
+      .then((result) => {
+        setPushState({
+          status: "pushed",
+          message:
+            result.message ??
+            (result.branch ? `Pushed ${result.branch}` : "Branch pushed"),
+        });
+      })
+      .catch((error) => {
+        setPushState({
+          status: "error",
+          message: error instanceof Error ? error.message : "Push failed",
+        });
+      });
+  }, [detailSessionId, pushState.status]);
 
   useEffect(() => {
     let cancelled = false;
@@ -5995,10 +6783,13 @@ function PrototypeWorkspace({
         learned={learned}
         previewUrl={previewUrl}
         prototype={prototype}
+        pushState={pushState}
+        runnerStatus={runnerStatus}
         onAddressChange={setAddressValue}
         onAddressSubmit={commitPreviewAddress}
         onBack={onBack}
         onCancelRun={handleCancelRun}
+        onPushCode={handlePushCode}
         onReloadPreview={reloadPreview}
         onRetryRun={handleRetryRun}
         onToggleSidebar={() => setSidebarOpen((value) => !value)}
@@ -6071,7 +6862,7 @@ function PrototypeWorkspace({
         <main className="m-2 min-h-0 flex-1 overflow-auto rounded-[1rem] border border-border bg-card shadow-[0_18px_54px_oklch(0.35_0.03_255_/_0.12)] lg:ml-0">
           <WorkspaceCanvas
             activeTab={activeTab}
-            events={runEvents}
+            events={combinedEvents}
             handoff={handoff}
             iframeKey={iframeKey}
             learned={learned}
@@ -6147,13 +6938,14 @@ function AppShell() {
 
     async function loadDashboardData() {
       try {
-        const [workspacePayload, sessions, repoPayload, guidePayload] =
-          await Promise.all([
+        const [workspacePayload, repoPayload, guidePayload] = await Promise.all([
           fetchWorkspaceSummary(),
-          fetchSessionSummaries(),
           fetchRepoConnection().catch(() => null),
           fetchProjectGuide().catch(() => null),
         ]);
+        const sessions = await fetchSessionSummaries(
+          repoPayload?.projectId ?? repoPayload?.id,
+        );
 
         if (cancelled) {
           return;
@@ -6217,7 +7009,10 @@ function AppShell() {
 
     try {
       setCreatingSession(true);
-      const payload = await createSession(title);
+      const payload = await createSession(
+        title,
+        repoConnection?.projectId ?? repoConnection?.id,
+      );
       const nextCard = sessionToPrototypeCard(payload);
 
       if (images.length > 0 || tab === "Setup") {
@@ -6420,6 +7215,7 @@ function PrototypeDetailInner({
   const [chatMessages, setChatMessages] = useState<ChatMessageData[]>([]);
   const [chatError, setChatError] = useState<string | null>(null);
   const [liveStatus, setLiveStatus] = useState<string | null>(null);
+  const [sessionEvents, setSessionEvents] = useState<RunEventData[]>([]);
   const [repoConnection, setRepoConnection] =
     useState<RepoConnectionData | null>(null);
   const [workspace, setWorkspace] = useState<WorkspaceSummary | null>(null);
@@ -6472,6 +7268,7 @@ function PrototypeDetailInner({
             ...card,
             status: "Ready",
             sessionStatus: "new_ready",
+            runnerStatus: "new_ready",
           }));
           setLiveStatus("new_ready");
         } else {
@@ -6479,6 +7276,7 @@ function PrototypeDetailInner({
             ...card,
             status: "Draft",
             sessionStatus: "processing",
+            runnerStatus: "processing",
             latestRunId:
               assistantMessage && "runId" in assistantMessage
                 ? assistantMessage.runId
@@ -6527,13 +7325,11 @@ function PrototypeDetailInner({
 
     void Promise.all([
       fetchWorkspaceSummary().catch(() => null),
-      fetchSessionSummaries().catch(() => []),
       fetchRepoConnection().catch(() => null),
       fetchProjectGuide().catch(() => null),
     ]).then(
       ([
         nextWorkspace,
-        nextSessionSummaries,
         nextRepoConnection,
         nextProjectGuide,
       ]) => {
@@ -6542,9 +7338,21 @@ function PrototypeDetailInner({
       }
 
       setWorkspace(nextWorkspace);
-      setSessionCards(nextSessionSummaries.map(sessionToPrototypeCard));
       setRepoConnection(nextRepoConnection);
       setProjectGuide(nextProjectGuide);
+      void fetchSessionSummaries(
+        nextRepoConnection?.projectId ?? nextRepoConnection?.id,
+      )
+        .then((nextSessionSummaries) => {
+          if (!cancelled) {
+            setSessionCards(nextSessionSummaries.map(sessionToPrototypeCard));
+          }
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setSessionCards([]);
+          }
+        });
       },
     );
 
@@ -6599,7 +7407,7 @@ function PrototypeDetailInner({
     }
 
     const eventSource = new EventSource(
-      `${API_BASE_URL}/sessions/${detailSessionId}/events`,
+      `${API_BASE_URL}/chat-sessions/${detailSessionId}/events`,
       {
         withCredentials: true,
       },
@@ -6650,6 +7458,55 @@ function PrototypeDetailInner({
       );
     }
 
+    function applyRunnerProgressEvent(
+      eventName: SessionLiveEvent,
+      payload: SessionEventPayload,
+    ) {
+      const runEvent = sessionEventToRunEvent(
+        detailSessionId,
+        eventName,
+        payload,
+      );
+
+      setSessionEvents((current) => [runEvent, ...current].slice(0, 120));
+      setChatMessages((current) => [
+        ...current,
+        sessionEventToSystemMessage(runEvent),
+      ]);
+      setLiveStatus(runEvent.message ?? eventName);
+      patchPrototype((card) => ({
+        ...card,
+        branch: payload.branch ?? card.branch,
+        preview:
+          payload.url ?? payload.previewBaseUrl ?? card.previewUrl ?? card.preview,
+        previewBaseUrl: payload.previewBaseUrl ?? card.previewBaseUrl,
+        previewUrl: payload.url ?? card.previewUrl,
+        runnerStatus: eventName,
+        sessionStatus:
+          eventName === "preview_ready"
+            ? "preview_ready"
+            : eventName === "services_ready" || eventName === "dev_server_ready"
+              ? eventName
+              : card.sessionStatus,
+        status:
+          eventName === "preview_ready" ||
+          eventName === "services_ready" ||
+          eventName === "dev_server_ready"
+            ? mapSessionStatus(eventName)
+            : card.status,
+        latestRunId: payload.runId ?? card.latestRunId,
+        lastSuccessfulRunId:
+          eventName === "preview_ready"
+            ? payload.runId ?? card.lastSuccessfulRunId
+            : card.lastSuccessfulRunId,
+      }));
+
+      if (eventName === "preview_ready") {
+        markAssistantDone();
+        refreshSessionDetail();
+      }
+    }
+
     void Promise.all([
       fetchSessionDetail(detailSessionId),
       fetchSessionMessages(detailSessionId),
@@ -6693,6 +7550,7 @@ function PrototypeDetailInner({
         ...card,
         status: mapSessionStatus(status),
         sessionStatus: status,
+        runnerStatus: status,
         latestRunId: payload.runId ?? card.latestRunId,
       }));
     });
@@ -6749,6 +7607,8 @@ function PrototypeDetailInner({
               ? payload.runId ?? card.lastSuccessfulRunId
               : card.lastSuccessfulRunId,
           preview: payload.url ?? card.preview,
+          previewUrl: payload.url ?? card.previewUrl,
+          runnerStatus: eventName,
           notes: payload.url ? `Preview: ${payload.url}` : card.notes,
         }));
 
@@ -6756,6 +7616,15 @@ function PrototypeDetailInner({
           markAssistantDone();
           refreshSessionDetail();
         }
+      });
+    });
+
+    RUNNER_PROGRESS_EVENTS.forEach((eventName) => {
+      eventSource.addEventListener(eventName, (event) => {
+        applyRunnerProgressEvent(
+          eventName,
+          parsePayload(event as MessageEvent<string>),
+        );
       });
     });
 
@@ -6800,6 +7669,7 @@ function PrototypeDetailInner({
         projectGuide={projectGuide}
         recentSessionCards={sessionCards.slice(0, 8)}
         repoConnection={repoConnection}
+        sessionEvents={sessionEvents}
         onBack={() => router.push("/")}
         onSelectPrototype={handleSelectPrototype}
         sendingPrompt={sendingPrompt}
