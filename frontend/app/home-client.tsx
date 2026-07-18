@@ -3605,6 +3605,7 @@ function DashboardView({
     });
   }, [prototypeCards, searchQuery, sortBy]);
 
+  const hasPrototypeSessions = prototypeCards.length > 0;
   const sortLabel =
     sortBy === "systemFit"
       ? "Highest system fit"
@@ -3745,9 +3746,19 @@ function DashboardView({
   }
 
   return (
-    <div className="h-full overflow-y-auto">
-      <div className="relative min-h-full">
-        <div className="relative mx-auto flex w-full max-w-7xl flex-col px-4 py-8 sm:px-8 lg:px-12">
+    <div
+      className={cn(
+        "h-full overflow-y-auto",
+        hasPrototypeSessions ? "" : "grid place-items-center",
+      )}
+    >
+      <div className={cn("relative w-full", hasPrototypeSessions && "min-h-full")}>
+        <div
+          className={cn(
+            "relative mx-auto flex w-full max-w-7xl flex-col px-4 sm:px-8 lg:px-12",
+            hasPrototypeSessions ? "py-8" : "-translate-y-[6vh] py-8",
+          )}
+        >
           <SettingsDialog
             activeTab={settingsTab}
             hasConnectedRepo={hasConnectedRepo}
@@ -3769,7 +3780,14 @@ function DashboardView({
             workspace={workspace}
           />
 
-          <section className="mx-auto flex min-h-[640px] w-full max-w-3xl flex-col items-center justify-center pb-8 pt-10 text-center lg:min-h-[690px]">
+          <section
+            className={cn(
+              "mx-auto flex w-full max-w-3xl flex-col items-center justify-center text-center",
+              hasPrototypeSessions
+                ? "min-h-[640px] pb-8 pt-10 lg:min-h-[690px]"
+                : "min-h-0 py-8",
+            )}
+          >
             <HeroLogo />
             <div className="mt-7 space-y-1">
               <p className="text-sm font-medium text-muted-foreground">
@@ -4196,6 +4214,7 @@ function DashboardView({
             ) : null}
           </section>
 
+          {hasPrototypeSessions ? (
           <section className="mt-10">
             <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -4352,6 +4371,7 @@ function DashboardView({
               </div>
             ) : null}
           </section>
+          ) : null}
         </div>
       </div>
     </div>
@@ -7208,7 +7228,7 @@ function AppShell() {
         </header>
 
         <div className="min-h-0 flex-1 pt-16">
-          <div className="h-full overflow-hidden rounded-tl-[24px] border-l border-t border-border/80 bg-card/75">
+          <div className="h-full overflow-hidden rounded-tl-[24px] border-l border-t border-border/80 bg-white">
             <DashboardView
               key={
                 repoConnection
