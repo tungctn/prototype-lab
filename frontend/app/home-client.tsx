@@ -263,6 +263,7 @@ type PrototypeCardData = {
 
 type DashboardSort = "lastEdited" | "systemFit" | "review";
 type DashboardViewMode = "grid" | "list";
+type SettingsTab = "general" | "github";
 
 type SessionListResponse = {
   items: SessionSummary[];
@@ -2011,6 +2012,421 @@ function PrototypeCard({
   );
 }
 
+function SettingsNavItem({
+  active,
+  icon: Icon,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={cn(
+        "flex h-10 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-medium transition-colors",
+        active
+          ? "bg-[oklch(0.94_0_0)] text-foreground"
+          : "text-muted-foreground hover:bg-[oklch(0.97_0_0)] hover:text-foreground",
+      )}
+      aria-pressed={active}
+      onClick={onClick}
+    >
+      <Icon className="size-4 shrink-0" />
+      <span>{label}</span>
+    </button>
+  );
+}
+
+function SettingsReadOnlyField({
+  description,
+  label,
+  value,
+}: {
+  description?: string;
+  label: string;
+  value: string;
+}) {
+  return (
+    <label className="block">
+      <span className="text-sm font-medium">{label}</span>
+      <Input className="mt-1.5 h-10 bg-white" readOnly value={value} />
+      {description ? (
+        <span className="mt-1.5 block text-xs leading-5 text-muted-foreground">
+          {description}
+        </span>
+      ) : null}
+    </label>
+  );
+}
+
+function GithubStep({
+  action,
+  children,
+  complete,
+  index,
+  title,
+}: {
+  action?: React.ReactNode;
+  children?: React.ReactNode;
+  complete?: boolean;
+  index: number;
+  title: string;
+}) {
+  return (
+    <div className="grid gap-4 sm:grid-cols-[56px_minmax(0,1fr)_auto] sm:items-start">
+      <div className="flex items-center gap-3 sm:block">
+        <div
+          className={cn(
+            "flex size-9 items-center justify-center rounded-full text-sm font-semibold",
+            complete
+              ? "bg-[oklch(0.72_0.16_162)] text-white"
+              : "bg-[var(--codex-blue)] text-white",
+          )}
+        >
+          {complete ? <Check className="size-5" /> : index}
+        </div>
+      </div>
+      <div className="min-w-0">
+        <div className="text-base font-semibold">{title}</div>
+        {children ? <div className="mt-3">{children}</div> : null}
+      </div>
+      {action ? <div className="sm:pt-0.5">{action}</div> : null}
+    </div>
+  );
+}
+
+function SettingsDialog({
+  activeTab,
+  hasConnectedRepo,
+  onOpenChange,
+  onRepoFormChange,
+  onRepoSubmit,
+  onTabChange,
+  open,
+  projectGuide,
+  repoConnection,
+  repoError,
+  repoForm,
+  repoSaving,
+  selectedRepoName,
+  workspace,
+}: {
+  activeTab: SettingsTab;
+  hasConnectedRepo: boolean;
+  onOpenChange: (open: boolean) => void;
+  onRepoFormChange: React.Dispatch<React.SetStateAction<RepoConnectionInput>>;
+  onRepoSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
+  onTabChange: (tab: SettingsTab) => void;
+  open: boolean;
+  projectGuide: ProjectGuideData | null;
+  repoConnection: RepoConnectionData | null;
+  repoError: string | null;
+  repoForm: RepoConnectionInput;
+  repoSaving: boolean;
+  selectedRepoName: string;
+  workspace: WorkspaceSummary | null;
+}) {
+  const connectedAccount =
+    repoConnection?.repoFullName?.split("/").filter(Boolean)[0] ?? null;
+  const workspaceName = workspace?.name ?? "Archetype";
+  const workspaceRepoName = workspace?.repoName ?? "No default repo";
+  const guideSummary = projectGuide?.guide.content.summary;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="h-[min(760px,calc(100svh-2rem))] w-[min(calc(100%-2rem),72rem)] max-w-none overflow-hidden rounded-[1.6rem] bg-[oklch(0.985_0_0)] p-0">
+        <DialogTitle className="sr-only">Settings</DialogTitle>
+        <DialogDescription className="sr-only">
+          Workspace settings for general defaults and Github codebase setup.
+        </DialogDescription>
+        <div className="grid h-full min-h-0 grid-cols-1 bg-[oklch(0.985_0_0)] md:grid-cols-[250px_minmax(0,1fr)]">
+          <aside className="min-h-0 border-b border-border/70 px-4 py-5 md:border-b-0 md:border-r">
+            <div className="px-2 text-sm font-semibold text-muted-foreground">
+              Account
+            </div>
+            <div className="mt-4 flex items-center gap-3 px-2">
+              <Avatar className="size-10 border border-border">
+                <AvatarFallback className="bg-[oklch(0.93_0_0)] text-sm font-semibold">
+                  {workspaceName.slice(0, 1)}
+                </AvatarFallback>
+              </Avatar>
+              <div className="min-w-0">
+                <div className="truncate text-sm font-semibold">
+                  {workspaceName}
+                </div>
+                <div className="truncate text-xs text-muted-foreground">
+                  Private beta workspace
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-8 px-2 text-sm font-semibold text-muted-foreground">
+              Workspace
+            </div>
+            <div className="mt-3 space-y-1">
+              <SettingsNavItem
+                active={activeTab === "general"}
+                icon={LayoutDashboard}
+                label="General"
+                onClick={() => onTabChange("general")}
+              />
+            </div>
+
+            <div className="mt-8 px-2 text-sm font-semibold text-muted-foreground">
+              Codebase
+            </div>
+            <div className="mt-3 space-y-1">
+              <SettingsNavItem
+                active={activeTab === "github"}
+                icon={GithubMark}
+                label="Github"
+                onClick={() => onTabChange("github")}
+              />
+            </div>
+          </aside>
+
+          <div className="min-h-0 overflow-y-auto bg-white">
+            {activeTab === "general" ? (
+              <div className="mx-auto grid w-full max-w-3xl gap-8 px-6 py-10 sm:px-10">
+                <div>
+                  <div className="flex size-12 items-center justify-center rounded-2xl bg-[oklch(0.94_0_0)]">
+                    <LayoutDashboard className="size-5" />
+                  </div>
+                  <h2 className="mt-5 text-3xl font-semibold tracking-tight">
+                    General
+                  </h2>
+                  <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+                    Workspace defaults used by prototype prompts, generated
+                    handoffs, and preview checks.
+                  </p>
+                </div>
+
+                <div className="grid gap-4 rounded-2xl border border-border/70 bg-[oklch(0.99_0_0)] p-4 sm:grid-cols-2">
+                  <SettingsReadOnlyField
+                    label="Workspace name"
+                    value={workspaceName}
+                    description="Shown in the sidebar and settings surfaces."
+                  />
+                  <SettingsReadOnlyField
+                    label="Default codebase"
+                    value={workspaceRepoName}
+                    description="Updated after a Github repository is connected."
+                  />
+                  <SettingsReadOnlyField
+                    label="Preview origin"
+                    value={
+                      repoConnection?.previewOrigin ?? PROTOTYPE_PREVIEW_ORIGIN
+                    }
+                    description="Used when opening generated prototype previews."
+                  />
+                  <SettingsReadOnlyField
+                    label="Prototype root"
+                    value={repoConnection?.prototypeRoot ?? repoForm.prototypeRoot}
+                    description="Where generated routes and handoff files are expected."
+                  />
+                </div>
+
+                <div className="divide-y divide-border/70 rounded-2xl border border-border/70 bg-[oklch(0.99_0_0)]">
+                  <div className="flex items-center justify-between gap-4 p-4">
+                    <div>
+                      <div className="text-sm font-semibold">
+                        Source-backed project guide
+                      </div>
+                      <div className="mt-1 text-sm text-muted-foreground">
+                        {projectGuide
+                          ? `${guideSummary?.routeCount ?? 0} routes and ${guideSummary?.componentCount ?? 0} components mapped.`
+                          : "Connect Github to generate route and component evidence."}
+                      </div>
+                    </div>
+                    <Switch checked={Boolean(projectGuide)} disabled />
+                  </div>
+                  <div className="flex items-center justify-between gap-4 p-4">
+                    <div>
+                      <div className="text-sm font-semibold">
+                        Local test mode
+                      </div>
+                      <div className="mt-1 text-sm text-muted-foreground">
+                        Uses mock sessions when enabled by environment.
+                      </div>
+                    </div>
+                    <Switch checked={TEST_MODE} disabled />
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <form
+                className="mx-auto grid w-full max-w-4xl gap-10 px-6 py-10 sm:px-10"
+                onSubmit={onRepoSubmit}
+              >
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+                  <div className="flex size-16 shrink-0 items-center justify-center rounded-2xl bg-[oklch(0.17_0_0)] text-white">
+                    <GithubMark className="size-8" />
+                  </div>
+                  <div className="min-w-0">
+                    <h2 className="text-3xl font-semibold tracking-tight">
+                      Github
+                    </h2>
+                    <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+                      Connect your codebase so Archetype can scan routes,
+                      understand components, and build browser previews from the
+                      real product.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid gap-8">
+                  <GithubStep
+                    complete={hasConnectedRepo}
+                    index={1}
+                    title={
+                      hasConnectedRepo && connectedAccount
+                        ? `Connected as ${connectedAccount}`
+                        : "Connect Github account"
+                    }
+                    action={
+                      hasConnectedRepo ? (
+                        <Button
+                          variant="outline"
+                          className="rounded-full"
+                          disabled
+                          type="button"
+                        >
+                          Disconnect
+                        </Button>
+                      ) : (
+                        <Button
+                          className="rounded-full"
+                          disabled={!repoForm.repoUrl.trim() || repoSaving}
+                          type="submit"
+                        >
+                          Connect
+                        </Button>
+                      )
+                    }
+                  >
+                    {!hasConnectedRepo ? (
+                      <p className="max-w-xl text-sm leading-6 text-muted-foreground">
+                        Enter a repository below to establish the first Github
+                        connection for this workspace.
+                      </p>
+                    ) : null}
+                  </GithubStep>
+
+                  <GithubStep
+                    complete={hasConnectedRepo}
+                    index={2}
+                    title="Select repository"
+                    action={
+                      hasConnectedRepo ? (
+                        <Button
+                          variant="outline"
+                          className="max-w-[16rem] justify-between gap-3 rounded-full"
+                          type="button"
+                          onClick={() => onTabChange("github")}
+                        >
+                          <span className="truncate">{selectedRepoName}</span>
+                          <ChevronDown className="size-4 shrink-0" />
+                        </Button>
+                      ) : null
+                    }
+                  >
+                    <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_10rem]">
+                      <label className="block text-sm font-medium">
+                        Repository
+                        <Input
+                          className="mt-1.5 h-10"
+                          placeholder="owner/repo or https://github.com/owner/repo"
+                          value={repoForm.repoUrl}
+                          onChange={(event) =>
+                            onRepoFormChange((current) => ({
+                              ...current,
+                              repoUrl: event.target.value,
+                            }))
+                          }
+                        />
+                      </label>
+                      <label className="block text-sm font-medium">
+                        Branch
+                        <Input
+                          className="mt-1.5 h-10"
+                          value={repoForm.branch}
+                          onChange={(event) =>
+                            onRepoFormChange((current) => ({
+                              ...current,
+                              branch: event.target.value,
+                            }))
+                          }
+                        />
+                      </label>
+                    </div>
+                  </GithubStep>
+
+                  <GithubStep
+                    complete={Boolean(projectGuide)}
+                    index={3}
+                    title="Run setup agent"
+                    action={
+                      <Button
+                        className="min-w-36 rounded-full"
+                        disabled={repoSaving || !repoForm.repoUrl.trim()}
+                        type="submit"
+                      >
+                        {repoSaving
+                          ? "Running"
+                          : projectGuide
+                            ? "Run again"
+                            : "Start"}
+                      </Button>
+                    }
+                  >
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <label className="block text-sm font-medium">
+                        Prototype root
+                        <Input
+                          className="mt-1.5 h-10"
+                          value={repoForm.prototypeRoot}
+                          onChange={(event) =>
+                            onRepoFormChange((current) => ({
+                              ...current,
+                              prototypeRoot: event.target.value,
+                            }))
+                          }
+                        />
+                      </label>
+                      <label className="block text-sm font-medium">
+                        Preview origin
+                        <Input
+                          className="mt-1.5 h-10"
+                          value={repoForm.previewOrigin}
+                          onChange={(event) =>
+                            onRepoFormChange((current) => ({
+                              ...current,
+                              previewOrigin: event.target.value,
+                            }))
+                          }
+                        />
+                      </label>
+                    </div>
+                    {repoError ? (
+                      <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                        {repoError}
+                      </div>
+                    ) : null}
+                  </GithubStep>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function DashboardView({
   creatingSession,
   onCreateSession,
@@ -2040,6 +2456,8 @@ function DashboardView({
   const imageInputRef = useRef<HTMLInputElement>(null);
   const promptRef = useRef<HTMLTextAreaElement>(null);
   const [guideOpen, setGuideOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>("general");
   const [selectedImages, setSelectedImages] = useState<File[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<DashboardSort>("lastEdited");
@@ -2152,6 +2570,11 @@ function DashboardView({
     window.requestAnimationFrame(() => promptRef.current?.focus());
   };
 
+  const openSettings = (tab: SettingsTab) => {
+    setSettingsTab(tab);
+    setSettingsOpen(true);
+  };
+
   async function handleRepoSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -2177,6 +2600,23 @@ function DashboardView({
     <div className="h-full overflow-y-auto">
       <div className="relative min-h-full">
         <div className="relative mx-auto flex w-full max-w-7xl flex-col px-4 py-8 sm:px-8 lg:px-12">
+          <SettingsDialog
+            activeTab={settingsTab}
+            hasConnectedRepo={hasConnectedRepo}
+            onOpenChange={setSettingsOpen}
+            onRepoFormChange={setRepoForm}
+            onRepoSubmit={handleRepoSubmit}
+            onTabChange={setSettingsTab}
+            open={settingsOpen}
+            projectGuide={projectGuide}
+            repoConnection={repoConnection}
+            repoError={repoError}
+            repoForm={repoForm}
+            repoSaving={repoSaving}
+            selectedRepoName={selectedRepoName}
+            workspace={workspace}
+          />
+
           <section className="mx-auto flex min-h-[640px] w-full max-w-3xl flex-col items-center justify-center pb-8 pt-10 text-center lg:min-h-[690px]">
             <HeroLogo />
             <div className="mt-7 space-y-1">
@@ -2490,7 +2930,7 @@ function DashboardView({
                             {hasConnectedRepo ? (
                               <DropdownMenuItem
                                 className="gap-3 px-2 py-2 text-base"
-                                onSelect={() => setGuideOpen(true)}
+                                onSelect={() => openSettings("github")}
                               >
                                 <GithubMark className="size-5" />
                                 <span className="truncate">{selectedRepoName}</span>
@@ -2499,7 +2939,7 @@ function DashboardView({
                             ) : (
                               <DropdownMenuItem
                                 className="gap-3 px-2 py-2 text-base"
-                                onSelect={() => setGuideOpen(true)}
+                                onSelect={() => openSettings("github")}
                               >
                                 <GithubMark className="size-5" />
                                 <span className="truncate">
@@ -2509,7 +2949,7 @@ function DashboardView({
                             )}
                             <DropdownMenuItem
                               className="gap-3 px-2 py-2 text-base"
-                              onSelect={() => setGuideOpen(true)}
+                              onSelect={() => openSettings("github")}
                             >
                               <Plus className="size-5 text-muted-foreground" />
                               Add another repo
