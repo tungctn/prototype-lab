@@ -8,7 +8,9 @@ export class SubmitPromptDto {
     example: 'Tôi cần cải thiện UI phần meeting',
     maxLength: 4000,
   })
-  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
   @IsString()
   @IsNotEmpty()
   @MaxLength(4000)

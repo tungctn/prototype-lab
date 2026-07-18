@@ -17,6 +17,12 @@ type MessageRepositoryMock = Pick<
   'find'
 >;
 
+function routeSlugPatternMatcher(value: string): string {
+  const matcher: unknown = expect.objectContaining({ _value: value });
+
+  return matcher as string;
+}
+
 describe('SessionsService', () => {
   const workspace = {
     id: 'workspace-id',
@@ -335,7 +341,7 @@ describe('SessionsService', () => {
       id: 'session-id',
       createdAt: new Date('2026-06-27T00:00:00.000Z'),
       updatedAt: new Date('2026-06-27T00:00:00.000Z'),
-    } as ChatSessionEntity;
+    };
 
     sessionRepository.count.mockResolvedValue(0);
     sessionRepository.create.mockReturnValue(unsavedSession);
@@ -360,9 +366,7 @@ describe('SessionsService', () => {
     expect(sessionRepository.count).toHaveBeenCalledWith({
       where: {
         workspaceId: workspace.id,
-        routeSlug: expect.objectContaining({
-          _value: 'meeting-feature-a%',
-        }),
+        routeSlug: routeSlugPatternMatcher('meeting-feature-a%'),
       },
     });
     expect(filesystemService.ensureSessionDirectory).toHaveBeenCalledWith(
@@ -393,7 +397,7 @@ describe('SessionsService', () => {
       id: 'session-id',
       createdAt: new Date('2026-06-27T00:00:00.000Z'),
       updatedAt: new Date('2026-06-27T00:00:00.000Z'),
-    } as ChatSessionEntity;
+    };
     sessionRepository.save.mockResolvedValue(savedSession);
 
     await expect(
@@ -435,7 +439,7 @@ describe('SessionsService', () => {
       id: 'session-id',
       createdAt: new Date('2026-06-27T00:00:00.000Z'),
       updatedAt: new Date('2026-06-27T00:00:00.000Z'),
-    } as ChatSessionEntity);
+    });
 
     await service.createSession({ title: 'Meeting feature A' });
 
@@ -466,7 +470,7 @@ describe('SessionsService', () => {
       id: 'session-id-2',
       createdAt: new Date('2026-06-27T00:00:00.000Z'),
       updatedAt: new Date('2026-06-27T00:00:00.000Z'),
-    } as ChatSessionEntity);
+    });
 
     await service.createSession({ title: 'Meeting feature A' });
 

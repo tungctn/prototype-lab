@@ -17,6 +17,15 @@ export default function loadAppConfig() {
       PUBLIC_PROTOTYPE_BASE:
         process.env.DEMO_PUBLIC_PROTOTYPE_BASE || '/prototype',
     },
+    PRIVATE_BETA: {
+      USER_EMAIL:
+        process.env.PRIVATE_BETA_USER_EMAIL || 'founder@archetype.dev',
+      PASSCODE: process.env.PRIVATE_BETA_PASSCODE || 'test',
+      USER_NAME: process.env.PRIVATE_BETA_USER_NAME || 'Founder',
+      USER_ROLE: process.env.PRIVATE_BETA_USER_ROLE || 'owner',
+      COOKIE_SECRET:
+        process.env.AUTH_COOKIE_SECRET || 'local-dev-cookie-secret',
+    },
     GITHUB: {
       TOKEN: process.env.GITHUB_TOKEN,
     },

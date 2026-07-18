@@ -1,5 +1,4 @@
 import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
-import { PromptImageFile } from '../../sessions/types/prompt-image-file';
 import { PrototypeFilesystemService } from './prototype-filesystem.service';
 
 jest.mock('node:fs/promises', () => ({
@@ -160,7 +159,7 @@ describe('PrototypeFilesystemService', () => {
           mimetype: 'image/png',
           buffer: Buffer.from('image'),
           size: 5,
-        } as PromptImageFile,
+        },
       ]),
     ).resolves.toEqual([
       {
@@ -192,7 +191,7 @@ describe('PrototypeFilesystemService', () => {
           mimetype: 'text/plain',
           buffer: Buffer.from('text'),
           size: 4,
-        } as PromptImageFile,
+        },
       ]),
     ).rejects.toThrow('Only image uploads are supported');
   });

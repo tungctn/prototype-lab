@@ -81,7 +81,7 @@ describe('WorkspaceService', () => {
       ...unsavedWorkspace,
       id: 'new-workspace-id',
       createdAt: new Date('2026-06-27T00:00:00.000Z'),
-    } as WorkspaceEntity;
+    };
 
     workspaceRepository.findOne.mockResolvedValue(null);
     workspaceRepository.create.mockReturnValue(unsavedWorkspace);
