@@ -2616,7 +2616,7 @@ function WorkspaceSidebarContent({
       <div className="relative mt-5">
         <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input
-          className="h-9 rounded-full border-transparent bg-background/65 pl-9 shadow-none"
+          className="h-9 rounded-full bg-background/65 pl-9 shadow-none"
           placeholder="Search"
           value={searchQuery}
           onChange={(event) => onSearchChange(event.target.value)}
@@ -3789,15 +3789,15 @@ function DashboardView({
             )}
           >
             <HeroLogo />
-            <div className="mt-7 space-y-1">
-              <p className="text-sm font-medium text-muted-foreground">
+            <div className="mt-5 space-y-2">
+              <h2 className="text-3xl font-medium tracking-tight sm:text-5xl">
+                Build with your real product
+              </h2>
+              <p className="text-xs font-medium text-muted-foreground sm:text-sm">
                 {repoConnection?.status === "ready"
                   ? `${selectedRepoName} on ${repoConnection.branch}, ${repoConnection.currentCommitSha?.slice(0, 7) ?? "no commit"}`
                   : "Server-token GitHub repo, production components, learned patterns"}
               </p>
-              <h2 className="text-3xl font-medium tracking-tight sm:text-5xl">
-                Build with your real product
-              </h2>
             </div>
 
             {SHOW_PROJECT_GUIDE_FEATURE ? (
