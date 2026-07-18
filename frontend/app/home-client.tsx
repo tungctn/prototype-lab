@@ -109,6 +109,7 @@ const TEST_MODE = ["1", "true", "yes"].includes(
 const DEFAULT_PROTOTYPE_PREVIEW_PATH = "/patrimony";
 const SHOW_PROJECT_GUIDE_FEATURE = false;
 const SHOW_REPO_SELECTOR = true;
+const SHOW_BRIEF_TEMPLATE_MENU = false;
 const CHAT_PANEL_WIDTH_STORAGE_KEY = "archetype:workspace-chat-panel-width";
 const CHAT_PANEL_DEFAULT_WIDTH = 380;
 const CHAT_PANEL_MIN_WIDTH = 300;
@@ -2135,12 +2136,14 @@ function GithubStep({
   action,
   children,
   complete,
+  description,
   index,
   title,
 }: {
   action?: React.ReactNode;
   children?: React.ReactNode;
   complete?: boolean;
+  description: string;
   index: number;
   title: string;
 }) {
@@ -2152,7 +2155,7 @@ function GithubStep({
             "flex size-9 items-center justify-center rounded-full text-sm font-semibold",
             complete
               ? "bg-[oklch(0.72_0.16_162)] text-white"
-              : "bg-[var(--codex-blue)] text-white",
+              : "bg-[oklch(0.94_0_0)] text-muted-foreground",
           )}
         >
           {complete ? <Check className="size-5" /> : index}
@@ -2160,7 +2163,10 @@ function GithubStep({
       </div>
       <div className="min-w-0">
         <div className="text-base font-semibold">{title}</div>
-        {children ? <div className="mt-3">{children}</div> : null}
+        <p className="mt-1 max-w-xl text-sm leading-5 text-muted-foreground">
+          {description}
+        </p>
+        {children ? <div className="mt-2.5">{children}</div> : null}
       </div>
       {action ? <div className="sm:pt-0.5">{action}</div> : null}
     </div>
@@ -2230,7 +2236,17 @@ function SettingsDialog({
       ].filter((value): value is string => Boolean(value?.trim())),
     ),
   );
-  const selectedRepoLabel = repoForm.repoUrl.trim() || "Select a repository";
+  const branchOptions = Array.from(
+    new Set(
+      [repoConnection?.branch, repoForm.branch, "main"].filter(
+        (value): value is string => Boolean(value?.trim()),
+      ),
+    ),
+  );
+  const repoSelected = canSelectRepo && Boolean(repoForm.repoUrl.trim());
+  const primarySetupButtonClass =
+    "h-10 min-w-32 rounded-full bg-[oklch(0.16_0_0)] px-6 text-sm font-semibold text-white hover:bg-[oklch(0.24_0_0)]";
+  const firstGithubConnection = !hasConnectedRepo;
 
   function createSetupEnvRow(): EnvVariableRow {
     return {
@@ -2369,10 +2385,7 @@ function SettingsDialog({
             {activeTab === "general" ? (
               <div className="mx-auto grid w-full max-w-3xl gap-8 px-6 py-10 sm:px-10">
                 <div>
-                  <div className="flex size-12 items-center justify-center rounded-2xl bg-[oklch(0.94_0_0)]">
-                    <LayoutDashboard className="size-5" />
-                  </div>
-                  <h2 className="mt-5 text-3xl font-semibold tracking-tight">
+                  <h2 className="text-3xl font-semibold tracking-tight">
                     General
                   </h2>
                   <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
@@ -2381,7 +2394,7 @@ function SettingsDialog({
                   </p>
                 </div>
 
-                <div className="grid gap-4 rounded-2xl border border-border/70 bg-[oklch(0.99_0_0)] p-4 sm:grid-cols-2">
+                <div className="grid gap-x-6 gap-y-5 sm:grid-cols-2">
                   <SettingsReadOnlyField
                     label="Workspace name"
                     value={workspaceName}
@@ -2599,7 +2612,7 @@ function SettingsDialog({
             ) : (
               <div className="mx-auto grid w-full max-w-4xl gap-10 px-6 py-10 sm:px-10">
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-                  <div className="flex size-16 shrink-0 items-center justify-center rounded-2xl bg-[oklch(0.17_0_0)] text-white">
+                  <div className="flex size-16 shrink-0 items-center justify-center rounded-2xl border border-border/70 bg-white text-[oklch(0.16_0_0)]">
                     <GithubMark className="size-8" />
                   </div>
                   <div className="min-w-0">
@@ -2615,9 +2628,9 @@ function SettingsDialog({
                 </div>
 
                 <div className="relative grid gap-8">
-                  <div className="absolute left-[17px] top-9 hidden h-[8.5rem] w-px bg-border sm:block" />
                   <GithubStep
                     complete={canSelectRepo}
+                    description="Link this workspace to GitHub before selecting the codebase Archetype should scan."
                     index={1}
                     title={
                       hasConnectedRepo && connectedAccount
@@ -2630,7 +2643,7 @@ function SettingsDialog({
                       canSelectRepo ? (
                         <Button
                           variant="outline"
-                          className="rounded-full"
+                          className="h-10 min-w-32 rounded-full px-6"
                           disabled
                           type="button"
                         >
@@ -2638,8 +2651,7 @@ function SettingsDialog({
                         </Button>
                       ) : (
                         <Button
-                          variant="outline"
-                          className="rounded-full"
+                          className={primarySetupButtonClass}
                           type="button"
                           onClick={() => setConnectPromptOpen(true)}
                         >
@@ -2647,150 +2659,87 @@ function SettingsDialog({
                         </Button>
                       )
                     }
-                  >
-                    {!canSelectRepo ? (
-                      <p className="max-w-xl text-sm leading-6 text-muted-foreground">
-                        Link this workspace to GitHub before selecting the
-                        codebase Archetype should scan.
-                      </p>
-                    ) : null}
-                  </GithubStep>
+                  />
 
                   <GithubStep
-                    complete={Boolean(repoForm.repoUrl.trim()) && canSelectRepo}
+                    complete={repoSelected}
+                    description="Choose the repository and branch Archetype should scan for routes, components, and preview context."
                     index={2}
                     title="Select repository"
-                    action={
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="outline"
-                            className="max-w-[16rem] justify-between gap-3 rounded-full"
-                            disabled={!canSelectRepo}
-                            type="button"
-                          >
-                            <span className="truncate">{selectedRepoLabel}</span>
-                            <ChevronDown className="size-4 shrink-0" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent className="w-64 p-1" align="end">
-                          <div className="px-2 py-2 text-sm text-muted-foreground">
-                            Search repositories...
-                          </div>
-                          {repoOptions.length ? (
-                            repoOptions.map((repoOption) => (
-                              <DropdownMenuItem
-                                key={repoOption}
-                                onSelect={() =>
-                                  onRepoFormChange((current) => ({
-                                    ...current,
-                                    repoUrl: repoOption,
-                                  }))
-                                }
-                              >
-                                {repoOption}
-                              </DropdownMenuItem>
-                            ))
-                          ) : (
-                            <DropdownMenuItem disabled>
-                              No repositories yet
-                            </DropdownMenuItem>
-                          )}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    }
                   >
-                    <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_10rem]">
-                      <label className="block text-sm font-medium">
-                        Repository
-                        <Input
-                          className="mt-1.5 h-10"
-                          disabled={!canSelectRepo}
-                          placeholder="owner/repo or https://github.com/owner/repo"
-                          value={repoForm.repoUrl}
-                          onChange={(event) =>
-                            onRepoFormChange((current) => ({
-                              ...current,
-                              repoUrl: event.target.value,
-                            }))
-                          }
-                        />
-                      </label>
-                      <label className="block text-sm font-medium">
-                        Branch
-                        <Input
-                          className="mt-1.5 h-10"
-                          disabled={!canSelectRepo}
-                          value={repoForm.branch}
-                          onChange={(event) =>
-                            onRepoFormChange((current) => ({
-                              ...current,
-                              branch: event.target.value,
-                            }))
-                          }
-                        />
-                      </label>
-                    </div>
+                    {canSelectRepo ? (
+                      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_10rem]">
+                        <label className="block text-sm font-medium">
+                          Repository
+                          <select
+                            className="mt-1.5 h-10 w-full rounded-md border border-input bg-white px-2 text-sm outline-none disabled:pointer-events-none disabled:text-muted-foreground focus-visible:ring-3 focus-visible:ring-ring/40"
+                            disabled={repoOptions.length === 0}
+                            value={repoForm.repoUrl}
+                            onChange={(event) =>
+                              onRepoFormChange((current) => ({
+                                ...current,
+                                repoUrl: event.target.value,
+                              }))
+                            }
+                          >
+                            <option value="" disabled>
+                              Select repository
+                            </option>
+                            {repoOptions.map((repoOption) => (
+                              <option key={repoOption} value={repoOption}>
+                                {repoOption}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="block text-sm font-medium">
+                          Branch
+                          <select
+                            className="mt-1.5 h-10 w-full rounded-md border border-input bg-white px-2 text-sm outline-none disabled:pointer-events-none disabled:text-muted-foreground focus-visible:ring-3 focus-visible:ring-ring/40"
+                            value={repoForm.branch}
+                            onChange={(event) =>
+                              onRepoFormChange((current) => ({
+                                ...current,
+                                branch: event.target.value,
+                              }))
+                            }
+                          >
+                            {branchOptions.map((branchOption) => (
+                              <option key={branchOption} value={branchOption}>
+                                {branchOption}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      </div>
+                    ) : null}
                   </GithubStep>
 
                   <GithubStep
                     complete={false}
+                    description="Start the setup agent after the repository is selected."
                     index={3}
                     title="Run setup agent"
                     action={
-                      <Button
-                        className="min-w-36 rounded-full"
-                        disabled={
-                          repoSaving ||
-                          !canSelectRepo ||
-                          !repoForm.repoUrl.trim()
-                        }
-                        type="button"
-                        onClick={() => void onStartSetup()}
-                      >
-                        {repoSaving
-                          ? "Running"
-                          : projectGuide
-                            ? "Start"
-                            : "Start"}
-                      </Button>
+                      repoSelected ? (
+                        <Button
+                          className={primarySetupButtonClass}
+                          disabled={repoSaving}
+                          type="button"
+                          onClick={() => void onStartSetup()}
+                        >
+                          {repoSaving ? "Running" : "Start"}
+                        </Button>
+                      ) : null
                     }
                   >
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <label className="block text-sm font-medium">
-                        Prototype root
-                        <Input
-                          className="mt-1.5 h-10"
-                          value={repoForm.prototypeRoot}
-                          onChange={(event) =>
-                            onRepoFormChange((current) => ({
-                              ...current,
-                              prototypeRoot: event.target.value,
-                            }))
-                          }
-                        />
-                      </label>
-                      <label className="block text-sm font-medium">
-                        Preview origin
-                        <Input
-                          className="mt-1.5 h-10"
-                          value={repoForm.previewOrigin}
-                          onChange={(event) =>
-                            onRepoFormChange((current) => ({
-                              ...current,
-                              previewOrigin: event.target.value,
-                            }))
-                          }
-                        />
-                      </label>
-                    </div>
                     {repoError ? (
-                      <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                      <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
                         {repoError}
                       </div>
                     ) : null}
                     {setupError ? (
-                      <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                      <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
                         {setupError}
                       </div>
                     ) : null}
@@ -2802,12 +2751,14 @@ function SettingsDialog({
                       <div className="flex items-start justify-between gap-4">
                         <div>
                           <h3 className="text-lg font-semibold">
-                            Connect GitHub
+                            {firstGithubConnection
+                              ? "Connect GitHub"
+                              : "Reconnect GitHub"}
                           </h3>
                           <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                            Link your workspace to GitHub. Reconnect signs you
-                            in and reuses an existing installation when one is
-                            already available.
+                            {firstGithubConnection
+                              ? "Authorize GitHub access for this workspace. After connecting, choose the repository and branch Archetype should scan."
+                              : "Sign in again and reuse an existing GitHub installation when one is already available."}
                           </p>
                         </div>
                         <Button
@@ -2830,7 +2781,9 @@ function SettingsDialog({
                           }}
                           type="button"
                         >
-                          Reconfigure installation
+                          {firstGithubConnection
+                            ? "Configure installation"
+                            : "Reconfigure installation"}
                         </Button>
                         <Button
                           className="rounded-full"
@@ -2840,7 +2793,7 @@ function SettingsDialog({
                           }}
                           type="button"
                         >
-                          Reconnect
+                          {firstGithubConnection ? "Connect GitHub" : "Reconnect"}
                         </Button>
                       </div>
                     </div>
@@ -3475,49 +3428,51 @@ function DashboardView({
                     ) : null}
                   </div>
                   <div className="flex items-center gap-2">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="gap-1.5 rounded-full"
-                          type="button"
-                        >
-                          <MessageSquare className="size-4" />
-                          PM brief
-                          <ChevronDown className="size-3.5" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem
-                          onSelect={() =>
-                            applyBriefTemplate(
-                              "Problem: \nTarget user flow: \nAcceptance criteria: \nProduct area to modify: ",
-                            )
-                          }
-                        >
-                          PM brief
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onSelect={() =>
-                            applyBriefTemplate(
-                              "Bug: \nExpected behavior: \nActual behavior: \nAffected route or component: ",
-                            )
-                          }
-                        >
-                          Bug report
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onSelect={() =>
-                            applyBriefTemplate(
-                              "Experiment: \nAudience: \nSuccess metric: \nGuardrails: ",
-                            )
-                          }
-                        >
-                          Experiment
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                    {SHOW_BRIEF_TEMPLATE_MENU ? (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="gap-1.5 rounded-full"
+                            type="button"
+                          >
+                            <MessageSquare className="size-4" />
+                            PM brief
+                            <ChevronDown className="size-3.5" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            onSelect={() =>
+                              applyBriefTemplate(
+                                "Problem: \nTarget user flow: \nAcceptance criteria: \nProduct area to modify: ",
+                              )
+                            }
+                          >
+                            PM brief
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onSelect={() =>
+                              applyBriefTemplate(
+                                "Bug: \nExpected behavior: \nActual behavior: \nAffected route or component: ",
+                              )
+                            }
+                          >
+                            Bug report
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onSelect={() =>
+                              applyBriefTemplate(
+                                "Experiment: \nAudience: \nSuccess metric: \nGuardrails: ",
+                              )
+                            }
+                          >
+                            Experiment
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    ) : null}
                     <Button
                       size="icon"
                       className="rounded-full"
