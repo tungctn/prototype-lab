@@ -1,0 +1,627 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Product Flow + API Demo</title>
+    <style>
+      :root {
+        --bg: #f5f7fa;
+        --paper: #ffffff;
+        --ink: #182230;
+        --muted: #667085;
+        --line: #d8dee8;
+        --soft: #ecfdf7;
+        --soft-blue: #eef4ff;
+        --accent: #087568;
+        --blue: #1d4ed8;
+        --code: #263238;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", sans-serif;
+        line-height: 1.6;
+      }
+
+      main {
+        width: min(1180px, calc(100% - 32px));
+        margin: 32px auto;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--paper);
+        box-shadow: 0 18px 50px rgba(15, 23, 42, 0.08);
+      }
+
+      header,
+      section {
+        padding: 30px 46px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      header {
+        padding-top: 42px;
+        background:
+          linear-gradient(135deg, rgba(8, 117, 104, 0.12), transparent 42%),
+          linear-gradient(45deg, rgba(29, 78, 216, 0.06), transparent 34%),
+          var(--paper);
+      }
+
+      section:last-child {
+        border-bottom: 0;
+      }
+
+      h1,
+      h2,
+      h3 {
+        margin: 0;
+        line-height: 1.25;
+        letter-spacing: 0;
+      }
+
+      h1 {
+        max-width: 920px;
+        font-size: 38px;
+      }
+
+      h2 {
+        margin-bottom: 14px;
+        font-size: 22px;
+      }
+
+      h3 {
+        margin-bottom: 8px;
+        font-size: 16px;
+      }
+
+      p {
+        margin: 0 0 12px;
+      }
+
+      ul,
+      ol {
+        margin: 10px 0 0;
+        padding-left: 22px;
+      }
+
+      li {
+        margin: 6px 0;
+      }
+
+      code,
+      pre {
+        font-family:
+          ui-monospace, SFMono-Regular, SFMono-Regular, Menlo, Consolas,
+          "Liberation Mono", monospace;
+      }
+
+      code {
+        padding: 2px 6px;
+        border-radius: 5px;
+        background: #eef2f6;
+        color: var(--code);
+        font-size: 0.94em;
+      }
+
+      pre {
+        margin: 10px 0 0;
+        padding: 14px 16px;
+        overflow: auto;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #f8fafc;
+        color: var(--code);
+        font-size: 13px;
+        line-height: 1.5;
+      }
+
+      table {
+        width: 100%;
+        margin-top: 12px;
+        border: 1px solid var(--line);
+        border-collapse: collapse;
+        border-radius: 8px;
+        overflow: hidden;
+      }
+
+      th,
+      td {
+        padding: 12px 14px;
+        border-bottom: 1px solid var(--line);
+        text-align: left;
+        vertical-align: top;
+      }
+
+      th {
+        background: #f2f5f8;
+        color: #334155;
+        font-size: 13px;
+        text-transform: uppercase;
+      }
+
+      tr:last-child td {
+        border-bottom: 0;
+      }
+
+      .lead {
+        max-width: 900px;
+        margin-top: 14px;
+        color: var(--muted);
+        font-size: 17px;
+      }
+
+      .tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 22px;
+      }
+
+      .tag {
+        display: inline-flex;
+        align-items: center;
+        min-height: 30px;
+        padding: 4px 10px;
+        border: 1px solid rgba(8, 117, 104, 0.2);
+        border-radius: 999px;
+        background: var(--soft);
+        color: var(--accent);
+        font-size: 13px;
+        font-weight: 650;
+      }
+
+      .note {
+        padding: 14px 16px;
+        border-left: 4px solid var(--accent);
+        border-radius: 6px;
+        background: var(--soft);
+      }
+
+      .info {
+        padding: 14px 16px;
+        border-left: 4px solid var(--blue);
+        border-radius: 6px;
+        background: var(--soft-blue);
+      }
+
+      .steps {
+        display: grid;
+        gap: 14px;
+      }
+
+      .step {
+        display: grid;
+        grid-template-columns: 58px 1fr;
+        gap: 16px;
+        padding: 16px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+      }
+
+      .num {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 42px;
+        height: 42px;
+        border-radius: 999px;
+        background: var(--soft);
+        color: var(--accent);
+        font-weight: 750;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 16px;
+      }
+
+      .card {
+        padding: 16px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+      }
+
+      .screen {
+        display: grid;
+        grid-template-columns: 320px 1fr;
+        min-height: 420px;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+      }
+
+      .chat {
+        padding: 16px;
+        border-right: 1px solid var(--line);
+        background: #fbfcfe;
+      }
+
+      .bubble {
+        margin: 12px 0;
+        padding: 12px;
+        border-radius: 8px;
+        background: #eef2f6;
+      }
+
+      .bubble.ai {
+        background: var(--soft);
+      }
+
+      .preview {
+        display: grid;
+        place-items: center;
+        min-height: 420px;
+        background: #dbeafe;
+        color: #1e3a8a;
+      }
+
+      .preview-box {
+        width: min(520px, calc(100% - 48px));
+        padding: 20px;
+        border: 1px solid rgba(30, 58, 138, 0.18);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.86);
+      }
+
+      .muted {
+        color: var(--muted);
+      }
+
+      @media (max-width: 900px) {
+        main {
+          width: 100%;
+          margin: 0;
+          border-width: 0;
+          border-radius: 0;
+        }
+
+        header,
+        section {
+          padding: 24px 20px;
+        }
+
+        h1 {
+          font-size: 30px;
+        }
+
+        .grid,
+        .screen,
+        .step {
+          grid-template-columns: 1fr;
+        }
+
+        .chat {
+          border-right: 0;
+          border-bottom: 1px solid var(--line);
+        }
+
+        table {
+          display: block;
+          overflow-x: auto;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Flow chốt: product chat, local session folder, current/new preview</h1>
+        <p class="lead">
+          Bản này mô phỏng flow thật ở FE và BE: màn hình gọi API nào, API trả
+          gì, FE hiển thị gì, và preview panel cập nhật như thế nào sau khi
+          product gửi prompt.
+        </p>
+        <div class="tags">
+          <span class="tag">Product Flow</span>
+          <span class="tag">SSE Chat</span>
+          <span class="tag">Local Folder</span>
+          <span class="tag">Current vs New</span>
+        </div>
+      </header>
+
+      <section>
+        <h2>1. Kết luận ngắn</h2>
+        <div class="note">
+          <p>
+            Khi product bắt đầu một session, backend chỉ tạo folder parent trong
+            <code>src/app/(prototype)/prototype/{session_slug}</code>. Prompt đầu
+            tiên dùng <code>sandbox-fork</code> để tạo route <code>current</code>.
+            Prompt cải thiện tiếp theo copy <code>current</code> sang
+            <code>new</code>, rồi chỉ sửa route <code>new</code>.
+          </p>
+        </div>
+      </section>
+
+      <section>
+        <h2>2. Flow thật từ FE đến BE</h2>
+        <div class="steps">
+          <article class="step">
+            <div class="num">1</div>
+            <div>
+              <h3>FE mở workspace</h3>
+              <p>FE lấy project/repo đang demo để render header và trạng thái workspace.</p>
+              <pre>GET /api/workspace</pre>
+              <p class="muted">Hiển thị: repo name, prototype root path, trạng thái ready.</p>
+            </div>
+          </article>
+
+          <article class="step">
+            <div class="num">2</div>
+            <div>
+              <h3>FE tạo session khi user bắt đầu feature mới</h3>
+              <p>
+                Backend tạo <code>chat_session</code> và folder session local.
+                Chưa cần tạo <code>current</code> hoặc <code>new</code> ở bước này.
+              </p>
+              <pre>POST /api/sessions
+{
+  "title": "Meeting UI for lease detail"
+}</pre>
+              <p class="muted">
+                Hiển thị: card session, đường dẫn folder và trạng thái chờ fork
+                màn hình.
+              </p>
+            </div>
+          </article>
+
+          <article class="step">
+            <div class="num">3</div>
+            <div>
+              <h3>Prompt đầu tiên tạo current bằng sandbox-fork</h3>
+              <p>
+                User nói muốn cải thiện màn nào. Backend/agent dùng
+                <code>sandbox-fork</code> để clone màn production sang route
+                <code>current</code> với mock data.
+              </p>
+              <pre>POST /api/chat
+{
+  "session_id": "sess_001",
+  "message": "Tôi muốn cải thiện màn building detail này..."
+}</pre>
+              <p class="muted">Hiển thị: current panel mở sau khi nhận <code>current_ready</code>.</p>
+            </div>
+          </article>
+
+          <article class="step">
+            <div class="num">4</div>
+            <div>
+              <h3>Product gửi prompt cải thiện UI</h3>
+              <p>FE gọi chat API lần tiếp theo và đọc response stream qua SSE/HTTP streaming.</p>
+              <pre>POST /api/chat
+{
+  "session_id": "sess_001",
+  "message": "Thêm UI meeting trong lease detail page"
+}</pre>
+              <p class="muted">Hiển thị: user message trong chat, AI response chạy live từng đoạn.</p>
+            </div>
+          </article>
+
+          <article class="step">
+            <div class="num">5</div>
+            <div>
+              <h3>BE lưu chat và update route new</h3>
+              <p>
+                Backend copy <code>current</code> sang <code>new</code>, lưu user
+                message, tạo hoặc update <code>prototype_items</code>, rồi chỉ sửa
+                code trong route <code>new</code>.
+              </p>
+              <pre>cp -R meeting-feature-4/current meeting-feature-4/new
+edit src/app/(prototype)/prototype/meeting-feature-4/new/page.tsx</pre>
+              <p class="muted">Hiển thị: trạng thái saved, updating new version.</p>
+            </div>
+          </article>
+
+          <article class="step">
+            <div class="num">6</div>
+            <div>
+              <h3>FE reload new khi stream báo ready</h3>
+              <p>
+                Khi nhận <code>new_reloading</code>, FE hiển thị loading trên
+                panel new. Khi nhận <code>new_ready</code>, FE reload iframe new
+                hoặc để dev server hot reload.
+              </p>
+              <pre>event: new_ready
+data: {
+  "session_id": "sess_001",
+  "new_url": "http://localhost:3000/prototype/meeting-feature-4/new"
+}</pre>
+              <p class="muted">Hiển thị: current giữ nguyên, new có UI mới.</p>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section>
+        <h2>3. Màn hình nên hiển thị gì?</h2>
+        <div class="screen">
+          <div class="chat">
+            <h3>Chat + Session</h3>
+            <p class="muted">Repo: <code>social-media-web</code></p>
+            <p class="muted">Folder: <code>prototype/meeting-feature-4</code></p>
+            <p class="muted">Current: <code>/current</code></p>
+            <p class="muted">New: <code>/new</code></p>
+            <div class="bubble">Thêm UI meeting trong lease detail page</div>
+            <div class="bubble ai">
+              Đang phân tích page hiện tại... sẽ thêm meeting panel vào lease
+              detail.
+            </div>
+            <p class="muted">Status: <code>new_ready</code></p>
+          </div>
+          <div class="preview">
+            <div class="preview-box">
+              <h3>Current / New preview</h3>
+              <p>
+                FE mở <code>current_url</code> sau prompt fork đầu tiên. Sau
+                prompt cải thiện, FE mở hoặc reload <code>new_url</code>.
+              </p>
+              <p class="muted">
+                Demo URLs:
+                <code>/prototype/meeting-feature-4/current</code> và
+                <code>/prototype/meeting-feature-4/new</code>
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2>4. API contract chốt</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Thời điểm</th>
+              <th>API</th>
+              <th>FE dùng response để hiển thị</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Mở workspace</td>
+              <td><code>GET /api/workspace</code></td>
+              <td>Repo name, prototype root path, workspace ready.</td>
+            </tr>
+            <tr>
+              <td>Bắt đầu feature mới</td>
+              <td><code>POST /api/sessions</code></td>
+              <td>Session id, route slug, prototype folder.</td>
+            </tr>
+            <tr>
+              <td>Reload session cũ</td>
+              <td><code>GET /api/sessions/:id/messages</code></td>
+              <td>Lịch sử chat.</td>
+            </tr>
+            <tr>
+              <td>Gửi prompt</td>
+              <td><code>POST /api/chat</code></td>
+              <td>Lần đầu tạo current, lần sau tạo/update new.</td>
+            </tr>
+            <tr>
+              <td>Cần lấy item hiện tại</td>
+              <td><code>GET /api/sessions/:id/item</code></td>
+              <td>Prototype item status, title, route path.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>5. Response mẫu quan trọng</h2>
+        <div class="grid">
+          <div class="card">
+            <h3>POST /api/sessions</h3>
+            <pre>{
+  "id": "sess_001",
+  "workspace_id": "ws_demo_1",
+  "title": "Meeting UI for lease detail",
+  "route_slug": "meeting-feature-4",
+  "prototype_dir": "src/app/(prototype)/prototype/meeting-feature-4",
+  "status": "session_created"
+}</pre>
+          </div>
+
+          <div class="card">
+            <h3>POST /api/chat stream</h3>
+            <pre>event: message
+data: {"role":"assistant","content":"Dang phan tich yeu cau..."}
+
+event: item_saved
+data: {"item_id":"item_001","status":"saved"}
+
+event: current_ready
+data: {
+  "current_url":"http://localhost:3000/prototype/meeting-feature-4/current"
+}
+
+event: new_reloading
+data: {"new_url":"http://localhost:3000/prototype/meeting-feature-4/new"}
+
+event: new_ready
+data: {
+  "item_id":"item_001",
+  "status":"ready",
+  "new_url":"http://localhost:3000/prototype/meeting-feature-4/new"
+}</pre>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2>6. Trạng thái FE cần xử lý</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Status/Event</th>
+              <th>Ý nghĩa</th>
+              <th>FE làm gì</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>status = session_created</code></td>
+              <td>Folder parent của session đã có.</td>
+              <td>Hiển thị session và chờ prompt fork màn hình.</td>
+            </tr>
+            <tr>
+              <td><code>current_ready</code></td>
+              <td>Sandbox-fork đã tạo route current.</td>
+              <td>Set iframe current bằng <code>current_url</code>.</td>
+            </tr>
+            <tr>
+              <td><code>item_saved</code></td>
+              <td>Prompt đã tạo prototype item.</td>
+              <td>Hiển thị card/item đang xử lý.</td>
+            </tr>
+            <tr>
+              <td><code>new_reloading</code></td>
+              <td>Backend đang sửa route new.</td>
+              <td>Overlay loading lên panel new.</td>
+            </tr>
+            <tr>
+              <td><code>new_ready</code></td>
+              <td>Bản new đã sẵn sàng sau prompt.</td>
+              <td>Reload iframe new hoặc clear loading nếu dev server hot reload.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>7. Những gì chưa cần cho bản chốt này</h2>
+        <ul>
+          <li>Chưa cần <code>Keep</code>, <code>Revise</code>, <code>Discard</code>, <code>Handoff</code>, <code>Promote</code>.</li>
+          <li>Chưa cần GitHub branch, push code, PR hoặc merge.</li>
+          <li>Chưa cần bảng <code>branches</code> riêng vì demo chạy bằng folder local.</li>
+          <li>Chưa cần bảng preview environment riêng vì URL suy ra từ route local.</li>
+          <li>Chưa cần WebSocket vì stream một chiều từ BE về FE qua SSE là đủ.</li>
+          <li>Chưa cần deploy preview thật vì Next.js dev server local đọc route mới.</li>
+          <li>Chưa cần tạo <code>current</code> hoặc <code>new</code> ngay khi session vừa được tạo.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>8. Câu chốt</h2>
+        <p>
+          Flow demo nên được hiểu là: FE mở workspace, tạo session, BE tạo folder
+          parent dưới <code>(prototype)/prototype</code>. Prompt đầu tiên chạy
+          <code>sandbox-fork</code> để tạo <code>current</code>. Prompt cải thiện
+          tiếp theo copy <code>current</code> sang <code>new</code>, sửa code
+          trong <code>new</code>, rồi FE reload panel <code>new</code> khi nhận
+          <code>new_ready</code>.
+        </p>
+      </section>
+    </main>
+  </body>
+</html>

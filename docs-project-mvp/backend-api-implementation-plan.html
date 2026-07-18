@@ -1,0 +1,741 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Backend API Implementation Plan</title>
+    <style>
+      :root {
+        --bg: #f5f7fa;
+        --paper: #ffffff;
+        --ink: #182230;
+        --muted: #667085;
+        --line: #d8dee8;
+        --soft: #ecfdf7;
+        --soft-blue: #eef4ff;
+        --soft-warn: #fff7ed;
+        --accent: #087568;
+        --blue: #1d4ed8;
+        --warn: #c2410c;
+        --code: #263238;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", sans-serif;
+        line-height: 1.6;
+      }
+
+      main {
+        width: min(1180px, calc(100% - 32px));
+        margin: 32px auto;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--paper);
+        box-shadow: 0 18px 50px rgba(15, 23, 42, 0.08);
+      }
+
+      header,
+      section {
+        padding: 30px 46px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      header {
+        padding-top: 42px;
+        background:
+          linear-gradient(135deg, rgba(8, 117, 104, 0.12), transparent 42%),
+          linear-gradient(45deg, rgba(29, 78, 216, 0.06), transparent 34%),
+          var(--paper);
+      }
+
+      section:last-child {
+        border-bottom: 0;
+      }
+
+      h1,
+      h2,
+      h3 {
+        margin: 0;
+        line-height: 1.25;
+      }
+
+      h1 {
+        max-width: 920px;
+        font-size: 38px;
+      }
+
+      h2 {
+        margin-bottom: 14px;
+        font-size: 22px;
+      }
+
+      h3 {
+        margin-bottom: 8px;
+        font-size: 16px;
+      }
+
+      p {
+        margin: 0 0 12px;
+      }
+
+      ul,
+      ol {
+        margin: 10px 0 0;
+        padding-left: 22px;
+      }
+
+      li {
+        margin: 6px 0;
+      }
+
+      code,
+      pre {
+        font-family:
+          ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono",
+          monospace;
+      }
+
+      code {
+        padding: 2px 6px;
+        border-radius: 5px;
+        background: #eef2f6;
+        color: var(--code);
+        font-size: 0.94em;
+      }
+
+      pre {
+        margin: 10px 0 0;
+        padding: 14px 16px;
+        overflow: auto;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #f8fafc;
+        color: var(--code);
+        font-size: 13px;
+        line-height: 1.5;
+      }
+
+      table {
+        width: 100%;
+        margin-top: 12px;
+        border: 1px solid var(--line);
+        border-collapse: collapse;
+        border-radius: 8px;
+        overflow: hidden;
+      }
+
+      th,
+      td {
+        padding: 12px 14px;
+        border-bottom: 1px solid var(--line);
+        text-align: left;
+        vertical-align: top;
+      }
+
+      th {
+        background: #f2f5f8;
+        color: #334155;
+        font-size: 13px;
+        text-transform: uppercase;
+      }
+
+      tr:last-child td {
+        border-bottom: 0;
+      }
+
+      .lead {
+        max-width: 920px;
+        margin-top: 14px;
+        color: var(--muted);
+        font-size: 17px;
+      }
+
+      .tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 22px;
+      }
+
+      .tag {
+        display: inline-flex;
+        align-items: center;
+        min-height: 30px;
+        padding: 4px 10px;
+        border: 1px solid rgba(8, 117, 104, 0.2);
+        border-radius: 999px;
+        background: var(--soft);
+        color: var(--accent);
+        font-size: 13px;
+        font-weight: 650;
+      }
+
+      .note {
+        padding: 14px 16px;
+        border-left: 4px solid var(--accent);
+        border-radius: 6px;
+        background: var(--soft);
+      }
+
+      .info {
+        padding: 14px 16px;
+        border-left: 4px solid var(--blue);
+        border-radius: 6px;
+        background: var(--soft-blue);
+      }
+
+      .warn {
+        padding: 14px 16px;
+        border-left: 4px solid var(--warn);
+        border-radius: 6px;
+        background: var(--soft-warn);
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 16px;
+      }
+
+      .card,
+      .api {
+        padding: 16px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+      }
+
+      .apis {
+        display: grid;
+        gap: 16px;
+      }
+
+      .method {
+        display: inline-flex;
+        align-items: center;
+        min-width: 64px;
+        justify-content: center;
+        margin-right: 8px;
+        padding: 3px 8px;
+        border-radius: 6px;
+        background: #0f172a;
+        color: #fff;
+        font-size: 12px;
+        font-weight: 750;
+        letter-spacing: 0.03em;
+      }
+
+      .method.get {
+        background: #1d4ed8;
+      }
+
+      .method.post {
+        background: #087568;
+      }
+
+      .method.sse {
+        background: #c2410c;
+      }
+
+      .muted {
+        color: var(--muted);
+      }
+
+      @media (max-width: 760px) {
+        main {
+          width: 100%;
+          margin: 0;
+          border-width: 0;
+          border-radius: 0;
+        }
+
+        header,
+        section {
+          padding: 24px 20px;
+        }
+
+        h1 {
+          font-size: 30px;
+        }
+
+        .grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Plan triển khai Backend API cho prototype demo</h1>
+        <p class="lead">
+          Mục tiêu là có API thật đủ để FE mở workspace, tạo session, gửi prompt,
+          xem tiến trình live bằng SSE, và preview hai route <code>current</code>
+          / <code>new</code>. Bản này cố ý đơn giản, không GitHub branch, không
+          queue phức tạp, không auth.
+        </p>
+        <div class="tags">
+          <span class="tag">NestJS</span>
+          <span class="tag">TypeORM</span>
+          <span class="tag">PostgreSQL</span>
+          <span class="tag">Local Folder Prototype</span>
+          <span class="tag">SSE Live Events</span>
+        </div>
+      </header>
+
+      <section>
+        <h2>1. Scope được duyệt để code</h2>
+        <div class="note">
+          <p>
+            Backend sẽ quản lý metadata trong DB, còn source prototype vẫn nằm
+            trong local app tại
+            <code>src/app/(prototype)/prototype/{session_slug}</code>.
+          </p>
+          <p>
+            Khi tạo session: tạo folder session. Khi prompt đầu tiên: gọi
+            sandbox fork để tạo <code>current</code>. Khi prompt cải thiện: copy
+            <code>current</code> sang <code>new</code>, chỉ sửa
+            <code>new</code>.
+          </p>
+        </div>
+      </section>
+
+      <section>
+        <h2>2. API list</h2>
+        <div class="apis">
+          <article class="api">
+            <h3>
+              <span class="method get">GET</span>
+              <code>/api/workspace</code>
+            </h3>
+            <p>
+              FE gọi khi mở màn hình demo để biết backend đang trỏ tới repo/local
+              prototype root nào.
+            </p>
+            <table>
+              <tr>
+                <th>Input</th>
+                <td>Không cần body.</td>
+              </tr>
+              <tr>
+                <th>DB</th>
+                <td>
+                  Nếu chưa có workspace thì seed 1 record hard-code từ env hoặc
+                  config local.
+                </td>
+              </tr>
+              <tr>
+                <th>Response</th>
+                <td>
+                  <pre>{
+  "id": "uuid",
+  "name": "SNDQ Demo Workspace",
+  "repoName": "sndq-fe",
+  "prototypeRoot": "/Users/mac/Workspace/sndq/sndq/sndq-fe/src/app/(prototype)/prototype",
+  "status": "ready"
+}</pre>
+                </td>
+              </tr>
+              <tr>
+                <th>Triển khai</th>
+                <td>
+                  <code>WorkspaceService.getOrCreateDemoWorkspace()</code> dùng
+                  TypeORM repository, config path hard-code/env, không cần UI chọn
+                  repo ở bản demo.
+                </td>
+              </tr>
+            </table>
+          </article>
+
+          <article class="api">
+            <h3>
+              <span class="method post">POST</span>
+              <code>/api/sessions</code>
+            </h3>
+            <p>
+              Tạo một phiên làm việc mới. Backend tạo session DB và folder
+              <code>{session_slug}</code>, nhưng chưa tạo
+              <code>current</code>/<code>new</code> cho tới khi user gửi prompt.
+            </p>
+            <table>
+              <tr>
+                <th>Request</th>
+                <td>
+                  <pre>{
+  "title": "Meeting feature A"
+}</pre>
+                </td>
+              </tr>
+              <tr>
+                <th>Filesystem</th>
+                <td>
+                  Tạo folder:
+                  <code>prototype/{session_slug}</code>. Ví dụ:
+                  <code>prototype/meeting-feature-a</code>.
+                </td>
+              </tr>
+              <tr>
+                <th>DB</th>
+                <td>
+                  Insert <code>chat_sessions</code> với
+                  <code>status=session_created</code>,
+                  <code>route_path=/prototype/{session_slug}</code>,
+                  <code>prototype_dir=.../{session_slug}</code>.
+                </td>
+              </tr>
+              <tr>
+                <th>Response</th>
+                <td>
+                  <pre>{
+  "id": "uuid",
+  "title": "Meeting feature A",
+  "routeSlug": "meeting-feature-a",
+  "routePath": "/prototype/meeting-feature-a",
+  "status": "session_created",
+  "items": []
+}</pre>
+                </td>
+              </tr>
+              <tr>
+                <th>Triển khai</th>
+                <td>
+                  <code>SessionsController.create()</code> validate title,
+                  generate slug đơn giản, tạo folder bằng Node
+                  <code>fs.mkdir</code>, lưu DB.
+                </td>
+              </tr>
+            </table>
+          </article>
+
+          <article class="api">
+            <h3>
+              <span class="method get">GET</span>
+              <code>/api/sessions/:sessionId</code>
+            </h3>
+            <p>Lấy lại trạng thái session để FE render header, chat và preview.</p>
+            <table>
+              <tr>
+                <th>Input</th>
+                <td><code>sessionId</code> trên URL.</td>
+              </tr>
+              <tr>
+                <th>DB</th>
+                <td>
+                  Query <code>chat_sessions</code>, join
+                  <code>prototype_items</code>, lấy messages gần nhất nếu cần.
+                </td>
+              </tr>
+              <tr>
+                <th>Response</th>
+                <td>
+                  <pre>{
+  "id": "uuid",
+  "title": "Meeting feature A",
+  "status": "new_ready",
+  "routePath": "/prototype/meeting-feature-a",
+  "items": [
+    {
+      "kind": "current",
+      "url": "/prototype/meeting-feature-a/current"
+    },
+    {
+      "kind": "new",
+      "url": "/prototype/meeting-feature-a/new"
+    }
+  ]
+}</pre>
+                </td>
+              </tr>
+              <tr>
+                <th>Triển khai</th>
+                <td>
+                  Một service method <code>getSessionDetail()</code>, không cần
+                  phân trang ở bản demo.
+                </td>
+              </tr>
+            </table>
+          </article>
+
+          <article class="api">
+            <h3>
+              <span class="method get">GET</span>
+              <code>/api/sessions/:sessionId/messages</code>
+            </h3>
+            <p>Lấy lịch sử chat của session.</p>
+            <table>
+              <tr>
+                <th>Input</th>
+                <td><code>sessionId</code>. Có thể thêm <code>?limit=50</code>.</td>
+              </tr>
+              <tr>
+                <th>DB</th>
+                <td>
+                  Query <code>chat_messages</code> theo
+                  <code>session_id</code>, sort <code>created_at asc</code>.
+                </td>
+              </tr>
+              <tr>
+                <th>Response</th>
+                <td>
+                  <pre>{
+  "items": [
+    {
+      "id": "uuid",
+      "role": "user",
+      "content": "Tôi muốn cải thiện UI này",
+      "createdAt": "2026-06-27T07:00:00.000Z"
+    }
+  ]
+}</pre>
+                </td>
+              </tr>
+              <tr>
+                <th>Triển khai</th>
+                <td>
+                  Controller đọc DB trực tiếp qua service, chưa cần websocket/SSE
+                  cho history.
+                </td>
+              </tr>
+            </table>
+          </article>
+
+          <article class="api">
+            <h3>
+              <span class="method post">POST</span>
+              <code>/api/sessions/:sessionId/prompts</code>
+            </h3>
+            <p>
+              API chính. FE gửi prompt, backend lưu message, chạy task local, và
+              trả response nhanh. Tiến trình live đi qua SSE endpoint bên dưới.
+            </p>
+            <table>
+              <tr>
+                <th>Request</th>
+                <td>
+                  <pre>{
+  "content": "Tôi cần cải thiện UI phần meeting"
+}</pre>
+                </td>
+              </tr>
+              <tr>
+                <th>Nhánh xử lý</th>
+                <td>
+                  Nếu session chưa có <code>current</code>: gọi sandbox fork để
+                  tạo <code>current</code>. Nếu đã có <code>current</code>: copy
+                  <code>current</code> sang <code>new</code>, rồi sửa
+                  <code>new</code> theo prompt.
+                </td>
+              </tr>
+              <tr>
+                <th>DB</th>
+                <td>
+                  Insert <code>chat_messages(role=user)</code>. Sau khi task xong,
+                  insert/update <code>prototype_items(kind=current|new)</code> và
+                  update <code>chat_sessions.status</code>.
+                </td>
+              </tr>
+              <tr>
+                <th>Response</th>
+                <td>
+                  <pre>{
+  "accepted": true,
+  "sessionId": "uuid",
+  "status": "processing"
+}</pre>
+                </td>
+              </tr>
+              <tr>
+                <th>Triển khai</th>
+                <td>
+                  <code>PromptsService.submitPrompt()</code> lưu user message rồi
+                  chạy async fire-and-forget trong cùng process để demo nhanh.
+                  Không dùng queue. Nếu cần mock AI, service sẽ tạo/sửa file mẫu
+                  trong <code>new</code>.
+                </td>
+              </tr>
+            </table>
+          </article>
+
+          <article class="api">
+            <h3>
+              <span class="method sse">SSE</span>
+              <code>GET /api/sessions/:sessionId/events</code>
+            </h3>
+            <p>
+              FE mở EventSource để nhận log và trạng thái live trong lúc backend
+              tạo/copy/sửa prototype.
+            </p>
+            <table>
+              <tr>
+                <th>Input</th>
+                <td><code>sessionId</code> trên URL.</td>
+              </tr>
+              <tr>
+                <th>Event mẫu</th>
+                <td>
+                  <pre>event: session_status
+data: {"status":"processing","message":"Đang xử lý prompt"}
+
+event: current_ready
+data: {"url":"/prototype/meeting-feature-a/current"}
+
+event: new_ready
+data: {"url":"/prototype/meeting-feature-a/new"}</pre>
+                </td>
+              </tr>
+              <tr>
+                <th>DB</th>
+                <td>
+                  Không cần lưu mọi event. Chỉ lưu message/status/item cuối cùng.
+                  Log live để trong memory.
+                </td>
+              </tr>
+              <tr>
+                <th>Triển khai</th>
+                <td>
+                  <code>SessionEventsService</code> dùng RxJS
+                  <code>Subject</code> theo <code>sessionId</code>. Controller
+                  dùng Nest <code>@Sse()</code>. Đủ cho demo local một process.
+                </td>
+              </tr>
+            </table>
+          </article>
+        </div>
+      </section>
+
+      <section>
+        <h2>3. Thứ tự triển khai code</h2>
+        <ol>
+          <li>
+            Tạo DTO cho <code>CreateSessionDto</code> và
+            <code>SubmitPromptDto</code>.
+          </li>
+          <li>
+            Tạo <code>PrototypeController</code> gồm workspace, sessions,
+            prompts, messages, events.
+          </li>
+          <li>
+            Tạo <code>WorkspaceService</code>,
+            <code>SessionsService</code>, <code>PromptsService</code>,
+            <code>SessionEventsService</code>.
+          </li>
+          <li>
+            Tạo <code>PrototypeFilesystemService</code> để mkdir, copy current
+            sang new, build URL.
+          </li>
+          <li>
+            Tạo <code>SandboxForkService</code> bản demo: gọi được skill/script
+            sau này, trước mắt có thể mock tạo folder/file để FE thấy preview.
+          </li>
+          <li>
+            Wire TypeORM repositories vào module, validate input bằng
+            <code>class-validator</code>.
+          </li>
+          <li>
+            Test bằng curl: workspace, create session, open SSE, submit prompt,
+            get session detail.
+          </li>
+        </ol>
+      </section>
+
+      <section>
+        <h2>4. Mapping với DB hiện tại</h2>
+        <table>
+          <tr>
+            <th>Table</th>
+            <th>Dùng cho</th>
+          </tr>
+          <tr>
+            <td><code>workspaces</code></td>
+            <td>
+              Một workspace demo, giữ <code>repo_name</code> và
+              <code>prototype_root</code>.
+            </td>
+          </tr>
+          <tr>
+            <td><code>chat_sessions</code></td>
+            <td>
+              Một phiên làm việc, chứa slug/path/folder/status của session.
+            </td>
+          </tr>
+          <tr>
+            <td><code>chat_messages</code></td>
+            <td>
+              Lưu prompt user và assistant note ngắn. Không lưu full streaming
+              token.
+            </td>
+          </tr>
+          <tr>
+            <td><code>prototype_items</code></td>
+            <td>
+              Lưu hai bản preview: <code>current</code> và <code>new</code>.
+            </td>
+          </tr>
+        </table>
+      </section>
+
+      <section>
+        <h2>5. Demo behavior cụ thể</h2>
+        <div class="grid">
+          <div class="card">
+            <h3>Prompt đầu tiên</h3>
+            <pre>POST /api/sessions/:id/prompts
+"Tôi muốn cải thiện feature meeting"</pre>
+            <p>
+              Backend tạo <code>current</code> bằng sandbox fork, lưu item
+              <code>current</code>, SSE bắn <code>current_ready</code>.
+            </p>
+          </div>
+          <div class="card">
+            <h3>Prompt cải thiện tiếp theo</h3>
+            <pre>POST /api/sessions/:id/prompts
+"Làm UI meeting gọn hơn"</pre>
+            <p>
+              Backend copy <code>current</code> sang <code>new</code>, sửa
+              <code>new</code>, lưu item <code>new</code>, SSE bắn
+              <code>new_ready</code>.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2>6. Những thứ cố ý chưa làm</h2>
+        <div class="warn">
+          <ul>
+            <li>Chưa auth, chưa multi-user, chưa permission.</li>
+            <li>Chưa GitHub branch/PR vì demo local folder là đủ.</li>
+            <li>Chưa queue worker; task chạy async trong Nest process.</li>
+            <li>Chưa lưu toàn bộ stream AI token vào DB; chỉ lưu kết quả/status.</li>
+            <li>
+              Chưa quyết định Keep/Revise/Discard/Handoff/Promote vì flow hiện
+              tại chỉ cần preview.
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <section>
+        <h2>7. Cấu hình cần có</h2>
+        <pre>DATABASE_URL=postgresql://codex:codex@localhost:5432/codex_hackathon?schema=public
+DEMO_REPO_NAME=sndq-fe
+DEMO_PROTOTYPE_ROOT=/Users/mac/Workspace/sndq/sndq/sndq-fe/src/app/(prototype)/prototype
+DEMO_PUBLIC_PROTOTYPE_BASE=/prototype</pre>
+        <p class="muted">
+          Nếu muốn demo nhanh hơn nữa, các biến <code>DEMO_*</code> có thể
+          hard-code trong service trước, sau đó tách env sau.
+        </p>
+      </section>
+    </main>
+  </body>
+</html>

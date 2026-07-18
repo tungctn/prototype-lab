@@ -1,0 +1,658 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Product Prototype Workspace - MVP Business Spec</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f4f6f8;
+        --paper: #ffffff;
+        --ink: #17202a;
+        --muted: #64748b;
+        --line: #d7dee8;
+        --soft: #eef6f4;
+        --accent: #087568;
+        --accent-2: #2563eb;
+        --warn: #8a5a00;
+        --warn-soft: #fff5d9;
+        --code: #263238;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", sans-serif;
+        line-height: 1.6;
+      }
+
+      main {
+        width: min(1160px, calc(100% - 32px));
+        margin: 32px auto;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--paper);
+        box-shadow: 0 18px 50px rgba(15, 23, 42, 0.08);
+      }
+
+      header {
+        padding: 42px 48px 34px;
+        border-bottom: 1px solid var(--line);
+        background:
+          linear-gradient(135deg, rgba(8, 117, 104, 0.12), transparent 42%),
+          linear-gradient(45deg, rgba(37, 99, 235, 0.07), transparent 36%),
+          var(--paper);
+      }
+
+      section {
+        padding: 28px 48px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      section:last-child {
+        border-bottom: 0;
+      }
+
+      h1,
+      h2,
+      h3 {
+        margin: 0;
+        line-height: 1.25;
+        letter-spacing: 0;
+      }
+
+      h1 {
+        max-width: 920px;
+        font-size: 40px;
+      }
+
+      h2 {
+        margin-bottom: 14px;
+        font-size: 22px;
+      }
+
+      h3 {
+        margin-bottom: 8px;
+        font-size: 16px;
+      }
+
+      p {
+        margin: 0 0 12px;
+      }
+
+      ul,
+      ol {
+        margin: 10px 0 0;
+        padding-left: 22px;
+      }
+
+      li {
+        margin: 6px 0;
+      }
+
+      table {
+        width: 100%;
+        margin-top: 12px;
+        border: 1px solid var(--line);
+        border-collapse: collapse;
+        border-radius: 8px;
+        overflow: hidden;
+      }
+
+      th,
+      td {
+        padding: 12px 14px;
+        border-bottom: 1px solid var(--line);
+        text-align: left;
+        vertical-align: top;
+      }
+
+      th {
+        background: #f2f5f8;
+        color: #334155;
+        font-size: 13px;
+        text-transform: uppercase;
+      }
+
+      tr:last-child td {
+        border-bottom: 0;
+      }
+
+      code {
+        padding: 2px 6px;
+        border-radius: 5px;
+        background: #eef2f6;
+        color: var(--code);
+        font-size: 0.94em;
+      }
+
+      .lead {
+        max-width: 880px;
+        margin-top: 14px;
+        color: var(--muted);
+        font-size: 17px;
+      }
+
+      .meta,
+      .pill-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .meta {
+        margin-top: 22px;
+      }
+
+      .tag,
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        min-height: 30px;
+        padding: 4px 10px;
+        border-radius: 999px;
+        font-size: 13px;
+      }
+
+      .tag {
+        border: 1px solid rgba(8, 117, 104, 0.2);
+        background: var(--soft);
+        color: var(--accent);
+        font-weight: 650;
+      }
+
+      .pill {
+        border: 1px solid var(--line);
+        background: #f8fafc;
+        color: #334155;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 16px;
+      }
+
+      .grid-3 {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 16px;
+      }
+
+      .card {
+        min-height: 100%;
+        padding: 16px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+      }
+
+      .note {
+        padding: 14px 16px;
+        border-left: 4px solid var(--accent);
+        border-radius: 6px;
+        background: var(--soft);
+      }
+
+      .question {
+        padding: 14px 16px;
+        border-left: 4px solid var(--warn);
+        border-radius: 6px;
+        background: var(--warn-soft);
+      }
+
+      .muted {
+        color: var(--muted);
+      }
+
+      .flow {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 10px;
+        margin-top: 14px;
+      }
+
+      .flow-step {
+        min-height: 104px;
+        padding: 14px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #ffffff;
+      }
+
+      .flow-step strong {
+        display: block;
+        margin-bottom: 6px;
+      }
+
+      @media (max-width: 900px) {
+        main {
+          width: 100%;
+          margin: 0;
+          border-width: 0;
+          border-radius: 0;
+        }
+
+        header,
+        section {
+          padding: 24px 20px;
+        }
+
+        h1 {
+          font-size: 30px;
+        }
+
+        .grid,
+        .grid-3,
+        .flow {
+          grid-template-columns: 1fr;
+        }
+
+        table {
+          display: block;
+          overflow-x: auto;
+          white-space: nowrap;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Product Prototype Workspace for Real GitHub Repos</h1>
+        <p class="lead">
+          MVP này là một web workspace để product team demo feature mới trên
+          chính codebase thật. Người dùng vào frontend và thấy repo đã được setup
+          sẵn, có sandbox đồng bộ từ main, có nhiều prototype workspace riêng,
+          và có thể chạy demo mà không chạm trực tiếp vào nhánh production.
+        </p>
+        <div class="meta">
+          <span class="tag">Business Spec</span>
+          <span class="tag">MVP Demo First</span>
+          <span class="tag">Real GitHub Repo</span>
+          <span class="tag">Sandbox Prototype</span>
+        </div>
+      </header>
+
+      <section>
+        <h2>1. Một câu định vị</h2>
+        <div class="note">
+          <p>
+            Đây là công cụ giúp team product và founder tạo, xem, so sánh và demo
+            nhiều prototype feature trên một GitHub project thật, trong sandbox
+            an toàn được sync từ <code>main</code>.
+          </p>
+          <p>
+            Mục tiêu của MVP không phải là code generation chung chung. Mục tiêu
+            là làm cho buổi demo product có cảm giác thật: feature mới xuất hiện
+            trong đúng app, đúng layout, đúng workspace, đúng context sản phẩm.
+          </p>
+        </div>
+      </section>
+
+      <section>
+        <h2>2. Product hoạt động như thế nào?</h2>
+        <div class="flow">
+          <article class="flow-step">
+            <strong>1. Main repo</strong>
+            <span class="muted">Repo GitHub thật của product, ví dụ app đang có module building và lease.</span>
+          </article>
+          <article class="flow-step">
+            <strong>2. Sync</strong>
+            <span class="muted">Hệ thống đồng bộ codebase từ main qua workflow hoặc schedule.</span>
+          </article>
+          <article class="flow-step">
+            <strong>3. Sandbox</strong>
+            <span class="muted">Bản nền an toàn để prototype, không làm bẩn main.</span>
+          </article>
+          <article class="flow-step">
+            <strong>4. Checkout</strong>
+            <span class="muted">Tạo nhiều sandbox con như <code>sandbox/abc</code> hoặc <code>sandbox/feature-a</code>.</span>
+          </article>
+          <article class="flow-step">
+            <strong>5. Demo</strong>
+            <span class="muted">Product xem feature mới chạy trong app thật, rồi quyết định giữ, sửa hoặc bỏ.</span>
+          </article>
+        </div>
+      </section>
+
+      <section>
+        <h2>3. Business problem</h2>
+        <div class="grid">
+          <article class="card">
+            <h3>Product muốn thấy feature thật trước khi build nghiêm túc</h3>
+            <p>
+              Mockup tĩnh không đủ. Product cần bấm được, nhìn được trong layout
+              thật, và hiểu feature có hợp với app hiện tại không.
+            </p>
+          </article>
+          <article class="card">
+            <h3>Engineering không muốn main bị nhiễu</h3>
+            <p>
+              Những ý tưởng chưa chắc chắn không nên đi thẳng vào production
+              branch. Cần một nơi để thử nhanh, fail nhanh, và bỏ đi nếu không
+              có giá trị.
+            </p>
+          </article>
+          <article class="card">
+            <h3>Demo hiện tại thường thiếu context</h3>
+            <p>
+              Demo bằng Figma hoặc app giả khiến stakeholder phải tưởng tượng.
+              MVP này demo ngay trên product thật nên quyết định business nhanh
+              hơn.
+            </p>
+          </article>
+          <article class="card">
+            <h3>Nhiều ý tưởng cần chạy song song</h3>
+            <p>
+              Một team có thể thử nhiều hướng như <code>sandbox/abc</code>,
+              <code>sandbox/xyz</code>, <code>sandbox/meeting-feature-4</code>
+              mà không giẫm lên nhau.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section>
+        <h2>4. Người dùng chính</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Persona</th>
+              <th>Nhu cầu</th>
+              <th>Giá trị nhận được</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Founder</td>
+              <td>Muốn demo nhanh một feature mới cho investor, khách hàng hoặc team.</td>
+              <td>Có bản chạy được trên app thật trong thời gian ngắn.</td>
+            </tr>
+            <tr>
+              <td>Product Manager</td>
+              <td>Muốn validate flow, copy, layout và UX trước khi tạo ticket build thật.</td>
+              <td>Giảm tranh luận trừu tượng, tăng chất lượng spec.</td>
+            </tr>
+            <tr>
+              <td>Product Engineer</td>
+              <td>Muốn thử implementation direction mà không làm bẩn main.</td>
+              <td>Có sandbox rõ ràng để spike và demo.</td>
+            </tr>
+            <tr>
+              <td>Agency / Consultant</td>
+              <td>Muốn tạo nhiều phương án demo cho khách hàng trên repo thật.</td>
+              <td>Dễ trình bày nhiều option, dễ chốt scope.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>5. Trạng thái khi user vào frontend</h2>
+        <p>
+          Trải nghiệm đầu tiên giống ảnh minh họa: user vào trang
+          <code>Prototypes</code>, bên trái có workspace/project, giữa màn hình là
+          prompt để yêu cầu setup hoặc chỉnh prototype, phía dưới là các prototype
+          session đã tạo.
+        </p>
+        <div class="grid">
+          <article class="card">
+            <h3>Repo đã được setup sẵn</h3>
+            <ul>
+              <li>Workspace biết repo GitHub nào đang được dùng.</li>
+              <li>User thấy tên repo, ví dụ <code>social-media-web</code>.</li>
+              <li>Không bắt user cấu hình technical ngay từ đầu trong demo.</li>
+            </ul>
+          </article>
+          <article class="card">
+            <h3>Prototype sessions đã có</h3>
+            <ul>
+              <li>Mỗi session là một request hoặc feature prototype.</li>
+              <li>Card hiển thị số file thay đổi, diff summary và trạng thái.</li>
+              <li>User có thể mở lại session cũ để xem hoặc tiếp tục chỉnh.</li>
+            </ul>
+          </article>
+        </div>
+      </section>
+
+      <section>
+        <h2>6. Mô hình main, sandbox, checkout</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Khái niệm</th>
+              <th>Ý nghĩa business</th>
+              <th>Ví dụ trong demo</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>main</code></td>
+              <td>Product thật, nguồn tin cậy, không bị thay đổi bởi ý tưởng thử nghiệm.</td>
+              <td>App hiện có module building, lease, auth, workspace.</td>
+            </tr>
+            <tr>
+              <td><code>sandbox</code></td>
+              <td>Bản nền được sync từ main để tạo prototype an toàn.</td>
+              <td>Có đủ layout, auth, workspace giống app thật.</td>
+            </tr>
+            <tr>
+              <td><code>sandbox/abc</code></td>
+              <td>Một hướng thử nghiệm riêng, có thể bỏ đi hoặc tiếp tục phát triển.</td>
+              <td>Prototype cải tiến onboarding.</td>
+            </tr>
+            <tr>
+              <td><code>sandbox/xyz</code></td>
+              <td>Một hướng thử nghiệm khác, chạy song song với hướng trên.</td>
+              <td>Prototype dashboard mới.</td>
+            </tr>
+            <tr>
+              <td><code>sandbox/meeting-feature-4</code></td>
+              <td>Một feature cụ thể được product yêu cầu và demo trong app thật.</td>
+              <td>Thêm meeting feature gồm current view, component, service, hook.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>7. Demo story cần thể hiện</h2>
+        <ol>
+          <li>Người demo mở FE và chọn workspace đã gắn với GitHub repo thật.</li>
+          <li>Trang hiển thị trạng thái repo: main đã sync sang sandbox, prototype sessions đang sẵn sàng.</li>
+          <li>Người demo nhập prompt: "Add meeting feature for building lease workflow".</li>
+          <li>Hệ thống tạo một prototype session mới, ví dụ <code>sandbox/meeting-feature-4</code>.</li>
+          <li>Session hiển thị các thay đổi theo ngôn ngữ product: thêm layout, auth guard, workspace entry, current meeting view, component, service, hook.</li>
+          <li>User mở preview và thấy feature chạy trong app thật, không phải mock UI rời rạc.</li>
+          <li>Sau khi review, user chọn: tiếp tục chỉnh, discard, hoặc prepare handoff/PR cho engineering.</li>
+        </ol>
+      </section>
+
+      <section>
+        <h2>8. Các màn hình MVP</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Màn hình</th>
+              <th>User thấy gì?</th>
+              <th>Mục đích demo</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Workspace Home</td>
+              <td>Repo hiện tại, trạng thái sync, nút setup agent, prompt box.</td>
+              <td>Cho thấy product bắt đầu từ codebase thật.</td>
+            </tr>
+            <tr>
+              <td>Prototype Sessions</td>
+              <td>Danh sách card: tên request, số file đổi, trạng thái ready/running/failed.</td>
+              <td>Cho thấy nhiều prototype có thể chạy song song.</td>
+            </tr>
+            <tr>
+              <td>Session Detail</td>
+              <td>Business summary, file diff summary, preview link, action tiếp theo.</td>
+              <td>Giúp product review mà không cần đọc code sâu.</td>
+            </tr>
+            <tr>
+              <td>Preview</td>
+              <td>App thật chạy trong sandbox branch/session.</td>
+              <td>Moment quan trọng nhất: feature mới xuất hiện trong product thật.</td>
+            </tr>
+            <tr>
+              <td>Handoff</td>
+              <td>Quyết định keep/discard/promote, notes cho engineering.</td>
+              <td>Biến prototype thành quyết định business hoặc ticket kỹ thuật.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>9. Prototype session gồm những gì?</h2>
+        <div class="grid">
+          <article class="card">
+            <h3>Request</h3>
+            <p>
+              Prompt hoặc brief từ product, ví dụ "thêm meeting feature cho quy
+              trình lease".
+            </p>
+          </article>
+          <article class="card">
+            <h3>Sandbox branch</h3>
+            <p>
+              Nhánh hoặc workspace riêng để chứa thay đổi, ví dụ
+              <code>sandbox/meeting-feature-4</code>.
+            </p>
+          </article>
+          <article class="card">
+            <h3>Change summary</h3>
+            <p>
+              Tóm tắt bằng business language: thêm màn hình nào, flow nào, phần
+              nào liên quan tới app hiện tại.
+            </p>
+          </article>
+          <article class="card">
+            <h3>Preview state</h3>
+            <p>
+              Link hoặc trạng thái preview để user mở product thật và kiểm tra
+              prototype.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section>
+        <h2>10. Business value cần truyền tải</h2>
+        <div class="grid-3">
+          <article class="card">
+            <h3>Faster product validation</h3>
+            <p>
+              Từ ý tưởng tới bản có thể bấm được trong app thật nhanh hơn cách
+              viết spec rồi chờ dev.
+            </p>
+          </article>
+          <article class="card">
+            <h3>Safer experimentation</h3>
+            <p>
+              Mọi thử nghiệm nằm trong sandbox, không ảnh hưởng main và không ép
+              engineering merge sớm.
+            </p>
+          </article>
+          <article class="card">
+            <h3>Clearer handoff</h3>
+            <p>
+              Khi prototype ổn, team có diff, preview, decision notes và context
+              để chuyển sang build thật.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section>
+        <h2>11. Moment quan trọng trong demo</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Moment</th>
+              <th>Cần xảy ra trên màn hình</th>
+              <th>Thông điệp business</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Repo is real</td>
+              <td>User thấy tên GitHub repo thật và trạng thái setup.</td>
+              <td>Đây không phải demo trống, nó chạy trên product của bạn.</td>
+            </tr>
+            <tr>
+              <td>Sandbox is safe</td>
+              <td>User thấy main được sync sang sandbox và các checkout riêng.</td>
+              <td>Thử nghiệm nhanh mà không phá production branch.</td>
+            </tr>
+            <tr>
+              <td>Prototype is contextual</td>
+              <td>Feature mới dùng layout/module hiện có của app.</td>
+              <td>Prototype có ngữ cảnh thật, không phải mockup rời.</td>
+            </tr>
+            <tr>
+              <td>Decision is easy</td>
+              <td>User có lựa chọn keep, revise, discard, promote.</td>
+              <td>Buổi demo kết thúc bằng quyết định rõ ràng.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>12. MVP không làm gì ở bản đầu?</h2>
+        <ul>
+          <li>Không cần marketplace connector giống Alloy.</li>
+          <li>Không cần workflow automation tổng quát giữa nhiều third-party app.</li>
+          <li>Không cần phân tích toàn bộ codebase ở mức hoàn hảo.</li>
+          <li>Không cần merge tự động vào main.</li>
+          <li>Không cần giải quyết production deployment ngay.</li>
+          <li>Không cần UI builder kéo thả nếu prompt + session + preview đã đủ demo.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>13. Câu hỏi business cần chốt trước technical</h2>
+        <div class="question">
+          <ul>
+            <li>Repo demo chính sẽ là repo nào?</li>
+            <li>Feature demo đầu tiên là gì: meeting, dashboard, onboarding, hay workflow trong lease/building?</li>
+            <li>Preview cần mở app thật tới mức nào để stakeholder tin?</li>
+            <li>Session card cần hiển thị những chỉ số nào: file changed, diff, preview, status, owner?</li>
+            <li>Handoff cuối demo nên là PR, ticket, export spec, hay chỉ decision note?</li>
+            <li>Business persona ưu tiên là founder/product hay engineer?</li>
+          </ul>
+        </div>
+      </section>
+
+      <section>
+        <h2>14. Tóm tắt cách hiểu hiện tại</h2>
+        <p>
+          Product này là "prototype workspace trên repo thật". Nó dùng GitHub repo
+          làm nguồn, tạo sandbox an toàn, cho phép checkout nhiều prototype branch,
+          tạo feature theo request của product, preview trong app thật, rồi giúp
+          team quyết định giữ, sửa, bỏ hoặc chuyển sang engineering.
+        </p>
+        <p class="muted">
+          Đây là bản business spec để thống nhất demo MVP. Chưa đi vào technical
+          architecture, database, API hay queue.
+        </p>
+      </section>
+    </main>
+  </body>
+</html>

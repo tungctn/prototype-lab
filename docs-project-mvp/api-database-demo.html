@@ -1,0 +1,631 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Demo API + Database Design</title>đơn
+    <style>
+      :root {
+        --bg: #f5f7fa;
+        --paper: #ffffff;
+        --ink: #182230;
+        --muted: #667085;
+        --line: #d8dee8;
+        --soft: #ecfdf7;
+        --soft-2: #eef4ff;
+        --accent: #087568;
+        --accent-2: #1d4ed8;
+        --code: #263238;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", sans-serif;
+        line-height: 1.6;
+      }
+
+      main {
+        width: min(1120px, calc(100% - 32px));
+        margin: 32px auto;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--paper);
+        box-shadow: 0 18px 50px rgba(15, 23, 42, 0.08);
+      }
+
+      header {
+        padding: 42px 48px 34px;
+        border-bottom: 1px solid var(--line);
+        background:
+          linear-gradient(135deg, rgba(8, 117, 104, 0.12), transparent 42%),
+          linear-gradient(45deg, rgba(29, 78, 216, 0.06), transparent 34%),
+          var(--paper);
+      }
+
+      section {
+        padding: 28px 48px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      section:last-child {
+        border-bottom: 0;
+      }
+
+      h1,
+      h2,
+      h3 {
+        margin: 0;
+        line-height: 1.25;
+      }
+
+      h1 {
+        max-width: 860px;
+        font-size: 38px;
+      }
+
+      h2 {
+        margin-bottom: 14px;
+        font-size: 22px;
+      }
+
+      h3 {
+        margin-bottom: 8px;
+        font-size: 16px;
+      }
+
+      p {
+        margin: 0 0 12px;
+      }
+
+      ul,
+      ol {
+        margin: 10px 0 0;
+        padding-left: 22px;
+      }
+
+      li {
+        margin: 6px 0;
+      }
+
+      code,
+      pre {
+        font-family:
+          ui-monospace, SFMono-Regular, SFMono-Regular, Menlo, Consolas,
+          "Liberation Mono", monospace;
+      }
+
+      code {
+        padding: 2px 6px;
+        border-radius: 5px;
+        background: #eef2f6;
+        color: var(--code);
+        font-size: 0.94em;
+      }
+
+      pre {
+        margin: 12px 0 0;
+        padding: 14px 16px;
+        overflow: auto;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #f8fafc;
+        color: var(--code);
+        font-size: 13px;
+        line-height: 1.5;
+      }
+
+      table {
+        width: 100%;
+        margin-top: 12px;
+        border: 1px solid var(--line);
+        border-collapse: collapse;
+        border-radius: 8px;
+        overflow: hidden;
+      }
+
+      th,
+      td {
+        padding: 12px 14px;
+        border-bottom: 1px solid var(--line);
+        text-align: left;
+        vertical-align: top;
+      }
+
+      th {
+        background: #f2f5f8;
+        color: #334155;
+        font-size: 13px;
+        text-transform: uppercase;
+      }
+
+      tr:last-child td {
+        border-bottom: 0;
+      }
+
+      .lead {
+        max-width: 860px;
+        margin-top: 14px;
+        color: var(--muted);
+        font-size: 17px;
+      }
+
+      .tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 22px;
+      }
+
+      .tag {
+        display: inline-flex;
+        align-items: center;
+        min-height: 30px;
+        padding: 4px 10px;
+        border: 1px solid rgba(8, 117, 104, 0.2);
+        border-radius: 999px;
+        background: var(--soft);
+        color: var(--accent);
+        font-size: 13px;
+        font-weight: 650;
+      }
+
+      .note {
+        padding: 14px 16px;
+        border-left: 4px solid var(--accent);
+        border-radius: 6px;
+        background: var(--soft);
+      }
+
+      .info {
+        padding: 14px 16px;
+        border-left: 4px solid var(--accent-2);
+        border-radius: 6px;
+        background: var(--soft-2);
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 16px;
+      }
+
+      .card {
+        min-height: 100%;
+        padding: 16px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+      }
+
+      .flow {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .flow-step {
+        min-height: 112px;
+        padding: 14px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+      }
+
+      .flow-step strong {
+        display: block;
+        margin-bottom: 8px;
+        color: var(--accent);
+      }
+
+      .muted {
+        color: var(--muted);
+      }
+
+      @media (max-width: 900px) {
+        main {
+          width: 100%;
+          margin: 0;
+          border-width: 0;
+          border-radius: 0;
+        }
+
+        header,
+        section {
+          padding: 24px 20px;
+        }
+
+        h1 {
+          font-size: 30px;
+        }
+
+        .grid,
+        .flow {
+          grid-template-columns: 1fr;
+        }
+
+        table {
+          display: block;
+          overflow-x: auto;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Demo đơn giản nhất: API và Database cho prototype workspace</h1>
+        <p class="lead">
+          Mục tiêu của bản này không phải production architecture. Đây chỉ là
+          thiết kế đủ để demo flow chat nhiều lượt: tạo session folder local,
+          dùng sandbox-fork tạo bản current, rồi sửa bản new sau prompt cải thiện.
+        </p>
+        <div class="tags">
+          <span class="tag">Simple First</span>
+          <span class="tag">Hard-code OK</span>
+          <span class="tag">Demo Only</span>
+        </div>
+      </header>
+
+      <section>
+        <h2>1. Nguyên tắc làm đơn giản</h2>
+        <div class="note">
+          <p>
+            Chỉ giữ những gì cần cho demo. Không cần queue thật, không cần event
+            bus, không cần nhiều service, không cần workflow decision.
+          </p>
+        </div>
+        <ul>
+          <li>Frontend có thể gọi thẳng một backend nhỏ dạng Node/Express hoặc mock server.</li>
+          <li>Chat nên đi qua HTTP streaming hoặc <code>SSE</code>, chưa cần <code>WebSocket</code>.</li>
+          <li>Mỗi session có thể chứa nhiều prompt và nhiều câu trả lời của AI.</li>
+          <li>Khi tạo session, backend chỉ tạo folder parent theo <code>session_slug</code>.</li>
+          <li>Backend có thể hard-code việc đổi trạng thái từ <code>saved</code> sang <code>ready</code>.</li>
+          <li>Prompt đầu tiên gọi <code>sandbox-fork</code> để tạo <code>current</code>; prompt cải thiện copy <code>current</code> sang <code>new</code> rồi sửa <code>new</code>.</li>
+          <li>Workspace có thể chỉ có 1 record mặc định, không cần hệ multi-tenant đầy đủ.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>2. Flow backend rất ngắn</h2>
+        <div class="flow">
+          <div class="flow-step">
+            <strong>1. Tạo session</strong>
+            FE tạo session mới, backend tạo folder parent trong
+            <code>src/app/(prototype)/prototype/{session_slug}</code>.
+          </div>
+          <div class="flow-step">
+            <strong>2. Gửi prompt</strong>
+            Prompt đầu tiên gọi <code>sandbox-fork</code>, backend tạo route
+            <code>current</code> với mock data.
+          </div>
+          <div class="flow-step">
+            <strong>3. Stream về UI</strong>
+            Prompt cải thiện copy <code>current</code> sang <code>new</code>,
+            rồi backend stream từng đoạn trả lời qua <code>SSE</code>.
+          </div>
+          <div class="flow-step">
+            <strong>4. Tạo updated preview</strong>
+            Backend chỉ sửa route <code>new</code> và stream
+            <code>new_reloading</code> / <code>new_ready</code> để FE mở bản mới.
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2>3. API tối thiểu nên có</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Method</th>
+              <th>Path</th>
+              <th>Dùng để làm gì</th>
+              <th>Ghi chú demo</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>GET</code></td>
+              <td><code>/api/workspace</code></td>
+              <td>Lấy thông tin workspace hiện tại.</td>
+              <td>Có thể hard-code chỉ trả về 1 workspace.</td>
+            </tr>
+            <tr>
+              <td><code>GET</code></td>
+              <td><code>/api/sessions</code></td>
+              <td>Lấy danh sách chat session.</td>
+              <td>Dùng để render sidebar hoặc list conversation.</td>
+            </tr>
+            <tr>
+              <td><code>POST</code></td>
+              <td><code>/api/sessions</code></td>
+              <td>Tạo chat session và folder parent.</td>
+              <td>Chưa tạo current/new ở bước này.</td>
+            </tr>
+            <tr>
+              <td><code>GET</code></td>
+              <td><code>/api/sessions/:id/messages</code></td>
+              <td>Lấy lịch sử chat của một session.</td>
+              <td>Dùng khi reload trang hoặc mở lại session cũ.</td>
+            </tr>
+            <tr>
+              <td><code>POST</code></td>
+              <td><code>/api/chat</code></td>
+              <td>Nhận prompt mới và stream trả lời của AI.</td>
+              <td>Response là <code>SSE</code> hoặc HTTP stream.</td>
+            </tr>
+            <tr>
+              <td><code>GET</code></td>
+              <td><code>/api/sessions/:id/item</code></td>
+              <td>Lấy prototype item hiện tại của session.</td>
+              <td>Cho biết trạng thái <code>saved</code>, <code>building</code>, <code>ready</code>.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>4. Request và response mẫu</h2>
+        <div class="grid">
+          <div class="card">
+            <h3>Tạo chat session</h3>
+            <pre>{
+  "title": "Meeting UI for lease detail"
+}</pre>
+            <p class="muted">API: <code>POST /api/sessions</code></p>
+          </div>
+
+          <div class="card">
+            <h3>Response tạo session</h3>
+            <pre>{
+  "id": "sess_001",
+  "workspace_id": "ws_demo_1",
+  "title": "Meeting UI for lease detail",
+  "route_slug": "meeting-feature-4",
+  "route_path": "/prototype/meeting-feature-4",
+  "prototype_dir": "src/app/(prototype)/prototype/meeting-feature-4",
+  "status": "session_created",
+  "created_at": "2026-06-27T13:30:00Z"
+}</pre>
+          </div>
+
+          <div class="card">
+            <h3>Gửi prompt vào chat</h3>
+            <pre>{
+  "session_id": "sess_001",
+  "message": "Thêm UI meeting trong lease detail page"
+}</pre>
+            <p class="muted">API: <code>POST /api/chat</code></p>
+          </div>
+
+          <div class="card">
+            <h3>Event stream trả về từ chat</h3>
+            <pre>event: message
+data: {"role":"assistant","content":"Dang phan tich yeu cau..."}
+
+event: message
+data: {"role":"assistant","content":"Se them meeting UI trong lease detail."}
+
+event: current_ready
+data: {
+  "session_id":"sess_001",
+  "item_id":"item_current_001",
+  "current_url":"http://localhost:3000/prototype/meeting-feature-4/current"
+}
+
+event: item_saved
+data: {
+  "item_id":"item_001",
+  "kind":"new",
+  "route_slug":"new",
+  "route_path":"/prototype/meeting-feature-4/new",
+  "status":"saved"
+}
+
+event: new_reloading
+data: {
+  "session_id":"sess_001",
+  "new_url":"http://localhost:3000/prototype/meeting-feature-4/new"
+}
+
+event: new_ready
+data: {
+  "session_id":"sess_001",
+  "item_id":"item_001",
+  "status":"ready",
+  "new_url":"http://localhost:3000/prototype/meeting-feature-4/new"
+}</pre>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2>5. Database đơn giản nhất</h2>
+        <div class="info">
+          <p>
+            Với chat nhiều lượt, nên dùng 4 bảng tối thiểu. Nếu muốn cực gọn thì
+            vẫn có thể hard-code 1 workspace, nhưng nên giữ <code>sessions</code>,
+            <code>messages</code> và <code>items</code> tách nhau. Session lưu
+            folder parent; item lưu route <code>current</code> hoặc
+            <code>new</code>.
+          </p>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Bảng</th>
+              <th>Mục đích</th>
+              <th>Field nên có</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>workspaces</code></td>
+              <td>Lưu repo/project đang được demo.</td>
+              <td><code>id</code>, <code>name</code>, <code>repo_name</code>, <code>repo_url</code>, <code>created_at</code></td>
+            </tr>
+            <tr>
+              <td><code>chat_sessions</code></td>
+              <td>Lưu một cuộc trao đổi và folder parent của session.</td>
+              <td><code>id</code>, <code>workspace_id</code>, <code>title</code>, <code>status</code>, <code>route_slug</code>, <code>route_path</code>, <code>prototype_dir</code>, <code>created_at</code>, <code>updated_at</code></td>
+            </tr>
+            <tr>
+              <td><code>chat_messages</code></td>
+              <td>Lưu nhiều message trong cùng một session.</td>
+              <td><code>id</code>, <code>session_id</code>, <code>role</code>, <code>content</code>, <code>created_at</code></td>
+            </tr>
+            <tr>
+              <td><code>prototype_items</code></td>
+              <td>Lưu route <code>current</code> hoặc <code>new</code> được tạo từ prompt.</td>
+              <td><code>id</code>, <code>session_id</code>, <code>kind</code>, <code>title</code>, <code>status</code>, <code>route_slug</code>, <code>route_path</code>, <code>url</code>, <code>created_at</code>, <code>updated_at</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>6. SQL phác thảo</h2>
+        <pre>create table workspaces (
+  id varchar(40) primary key,
+  name varchar(255) not null,
+  repo_name varchar(255) not null,
+  repo_url text,
+  created_at timestamp not null default current_timestamp
+);
+
+create table chat_sessions (
+  id varchar(40) primary key,
+  workspace_id varchar(40) not null references workspaces(id),
+  title varchar(255) not null,
+  status varchar(40) not null default 'active',
+  route_slug varchar(255) not null,
+  route_path varchar(255) not null,
+  prototype_dir text not null,
+  created_at timestamp not null default current_timestamp,
+  updated_at timestamp not null default current_timestamp
+);
+
+create table chat_messages (
+  id varchar(40) primary key,
+  session_id varchar(40) not null references chat_sessions(id),
+  role varchar(20) not null,
+  content text not null,
+  created_at timestamp not null default current_timestamp
+);
+
+create table prototype_items (
+  id varchar(40) primary key,
+  session_id varchar(40) not null references chat_sessions(id),
+  kind varchar(20) not null,
+  title varchar(255) not null,
+  status varchar(40) not null default 'saved',
+  route_slug varchar(255) not null,
+  route_path varchar(255) not null,
+  url text,
+  created_at timestamp not null default current_timestamp,
+  updated_at timestamp not null default current_timestamp
+);</pre>
+      </section>
+
+      <section>
+        <h2>7. Dữ liệu demo có thể seed cứng</h2>
+        <div class="grid">
+          <div class="card">
+            <h3>Workspace</h3>
+            <pre>{
+  "id": "ws_demo_1",
+  "name": "Lease Product Workspace",
+  "repo_name": "social-media-web",
+  "repo_url": "https://github.com/demo/social-media-web"
+}</pre>
+          </div>
+
+          <div class="card">
+            <h3>Chat session</h3>
+            <pre>{
+  "id": "sess_001",
+  "workspace_id": "ws_demo_1",
+  "title": "Meeting UI for lease detail",
+  "status": "session_created",
+  "route_slug": "meeting-feature-4",
+  "route_path": "/prototype/meeting-feature-4",
+  "prototype_dir": "src/app/(prototype)/prototype/meeting-feature-4"
+}</pre>
+          </div>
+
+          <div class="card">
+            <h3>Chat message</h3>
+            <pre>{
+  "id": "msg_001",
+  "session_id": "sess_001",
+  "role": "user",
+  "content": "Thêm UI meeting trong lease detail page"
+}</pre>
+          </div>
+
+          <div class="card">
+            <h3>Prototype item</h3>
+            <pre>{
+  "id": "item_001",
+  "session_id": "sess_001",
+  "kind": "new",
+  "title": "Meeting UI for lease detail",
+  "status": "ready",
+  "route_slug": "new",
+  "route_path": "/prototype/meeting-feature-4/new",
+  "url": "http://localhost:3000/prototype/meeting-feature-4/new"
+}</pre>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2>8. Logic backend giả lập là đủ</h2>
+        <ul>
+          <li>Khi gọi <code>POST /api/sessions</code>, backend tạo record session và folder parent <code>src/app/(prototype)/prototype/{session_slug}</code>.</li>
+          <li>Prompt đầu tiên gọi <code>sandbox-fork</code> để tạo <code>{session_slug}/current</code> với mock data.</li>
+          <li>Khi gọi <code>POST /api/chat</code>, backend lưu user message vào <code>chat_messages</code>.</li>
+          <li>Ngay sau đó backend stream text trả lời dần qua <code>SSE</code> để FE render live.</li>
+          <li>Prompt cải thiện tiếp theo copy <code>current</code> sang <code>new</code>, rồi chỉ sửa code trong route <code>new</code>.</li>
+          <li>Endpoint chat có thể stream event <code>current_ready</code>, <code>item_saved</code>, <code>new_reloading</code>, <code>new_ready</code>.</li>
+          <li>Khi <code>new</code> sang ready, FE hiển thị hoặc reload panel new bằng <code>item.url</code>, đồng thời vẫn giữ current để so sánh.</li>
+          <li>Frontend không cần websocket, chỉ cần nghe stream của <code>/api/chat</code> và khi cần thì gọi <code>GET /api/sessions/:id/item</code>.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>9. Những gì chưa cần trong bản này</h2>
+        <ul>
+          <li>Không cần auth phức tạp.</li>
+          <li>Không cần background job thật.</li>
+          <li>Không cần GitHub branch, push code, PR hoặc merge.</li>
+          <li>Không cần tạo <code>current</code> hoặc <code>new</code> ngay khi session vừa được tạo.</li>
+          <li>Không cần bảng preview environments riêng nếu URL có thể suy ra từ route.</li>
+          <li>Không cần websocket nếu chỉ stream chat và vài status event.</li>
+          <li>Không cần bảng decisions như keep, revise, discard, handoff, promote.</li>
+          <li>Không cần audit log hay versioning đầy đủ.</li>
+          <li>Không cần tách microservice, queue hoặc worker riêng.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>10. Kết luận</h2>
+        <p>
+          Nếu mục tiêu là demo nhanh, cách hợp lý nhất là: 1 workspace, 1 bảng
+          session có thông tin folder parent, 1 bảng message, 1 bảng item cho
+          <code>current</code>/<code>new</code>, và một endpoint chat stream qua
+          <code>SSE</code>. Như vậy đã đủ kể câu chuyện product tạo session,
+          prompt đầu tạo current bằng sandbox-fork, prompt sau tạo new để so sánh.
+        </p>
+      </section>
+    </main>
+  </body>
+</html>
