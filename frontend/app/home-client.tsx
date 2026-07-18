@@ -22,12 +22,14 @@ import {
   LayoutDashboard,
   Link2,
   List,
+  LogOut,
   MessageSquare,
   PanelLeft,
   Plus,
   RefreshCcw,
   RotateCcw,
   Search,
+  Settings as SettingsIcon,
   Sparkles,
   Square,
   Trash2,
@@ -264,6 +266,7 @@ type PrototypeCardData = {
 type DashboardSort = "lastEdited" | "systemFit" | "review";
 type DashboardViewMode = "grid" | "list";
 type SettingsTab = "general" | "github";
+type SettingsSetupPhase = "github" | "environment";
 
 type SessionListResponse = {
   items: SessionSummary[];
@@ -1021,6 +1024,26 @@ async function loginPrivateBeta(email: string, passcode: string) {
   }
 
   return (await response.json()) as AuthPayload;
+}
+
+async function logoutPrivateBeta() {
+  await apiFetch("/auth/logout", {
+    method: "POST",
+  });
+}
+
+function clearPendingPromptStorage() {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  for (let index = window.sessionStorage.length - 1; index >= 0; index -= 1) {
+    const key = window.sessionStorage.key(index);
+
+    if (key?.startsWith("pending-prompt:")) {
+      window.sessionStorage.removeItem(key);
+    }
+  }
 }
 
 async function fetchWorkspaceSummary() {
@@ -1809,9 +1832,11 @@ function SidebarItem({
 
 function WorkspaceSidebarContent({
   headerAction,
+  onOpenSettings,
   onRecentOpenChange,
   onSearchChange,
   onSelectPrototype,
+  onSignOut,
   projectGuide,
   recentOpen,
   recentSessionCards,
@@ -1820,9 +1845,11 @@ function WorkspaceSidebarContent({
   workspaceName,
 }: {
   headerAction?: React.ReactNode;
+  onOpenSettings?: () => void;
   onRecentOpenChange: (value: boolean) => void;
   onSearchChange: (value: string) => void;
   onSelectPrototype: (card: PrototypeCardData) => void;
+  onSignOut?: () => void;
   projectGuide?: ProjectGuideData | null;
   recentOpen: boolean;
   recentSessionCards: PrototypeCardData[];
@@ -1841,21 +1868,62 @@ function WorkspaceSidebarContent({
       card.title.toLowerCase().includes(normalizedQuery),
     );
   }, [recentSessionCards, searchQuery]);
+  const hasWorkspaceMenu = Boolean(onOpenSettings || onSignOut);
+  const workspaceAvatar = (
+    <Avatar className="size-7 border border-border">
+      <AvatarFallback className="bg-[oklch(0.86_0.045_255)] text-xs font-semibold text-[oklch(0.28_0.08_270)]">
+        A
+      </AvatarFallback>
+    </Avatar>
+  );
 
   return (
     <>
-      <div className="flex items-center justify-between px-2">
-        <div className="flex min-w-0 items-center gap-2">
-          <Avatar className="size-7 border border-border">
-            <AvatarFallback className="bg-[oklch(0.86_0.045_255)] text-xs font-semibold text-[oklch(0.28_0.08_270)]">
-              A
-            </AvatarFallback>
-          </Avatar>
-          <span className="truncate text-sm font-semibold">
-            {workspaceName}
-          </span>
-        </div>
-        {headerAction}
+      <div className="flex items-center justify-between px-1">
+        {hasWorkspaceMenu ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                className="group flex min-w-0 flex-1 items-center gap-2 rounded-xl px-1 py-1.5 text-left text-sm font-semibold outline-none transition-colors hover:bg-background/65 focus-visible:bg-background/75 focus-visible:ring-3 focus-visible:ring-ring/35"
+                type="button"
+              >
+                {workspaceAvatar}
+                <span className="truncate">{workspaceName}</span>
+                <ChevronDown className="ml-auto size-3.5 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="start"
+              sideOffset={8}
+              className="w-56 rounded-2xl p-1.5 shadow-[0_18px_50px_oklch(0.24_0.018_260_/_0.16)]"
+            >
+              <DropdownMenuItem
+                className="h-10 gap-3 rounded-xl px-3 text-[0.95rem]"
+                disabled={!onOpenSettings}
+                onSelect={onOpenSettings}
+              >
+                <SettingsIcon className="size-4.5 text-muted-foreground" />
+                Settings
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="h-10 gap-3 rounded-xl px-3 text-[0.95rem]"
+                disabled={!onSignOut}
+                onSelect={onSignOut}
+              >
+                <LogOut className="size-4.5 text-muted-foreground" />
+                Sign out
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : (
+          <div className="flex min-w-0 flex-1 items-center gap-2 px-1 py-1.5">
+            {workspaceAvatar}
+            <span className="truncate text-sm font-semibold">
+              {workspaceName}
+            </span>
+          </div>
+        )}
+        {headerAction ? <div className="ml-2 shrink-0">{headerAction}</div> : null}
       </div>
 
       <div className="relative mt-5">
@@ -2102,9 +2170,11 @@ function GithubStep({
 function SettingsDialog({
   activeTab,
   hasConnectedRepo,
+  onCompleteEnvironmentSetup,
   onOpenChange,
   onRepoFormChange,
-  onRepoSubmit,
+  onSetupPhaseChange,
+  onStartSetup,
   onTabChange,
   open,
   projectGuide,
@@ -2112,14 +2182,20 @@ function SettingsDialog({
   repoError,
   repoForm,
   repoSaving,
-  selectedRepoName,
+  setupError,
+  setupPhase,
+  setupSaving,
   workspace,
 }: {
   activeTab: SettingsTab;
   hasConnectedRepo: boolean;
+  onCompleteEnvironmentSetup: (
+    variables: SaveRepoEnvironmentInput[],
+  ) => Promise<void>;
   onOpenChange: (open: boolean) => void;
   onRepoFormChange: React.Dispatch<React.SetStateAction<RepoConnectionInput>>;
-  onRepoSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
+  onSetupPhaseChange: (phase: SettingsSetupPhase) => void;
+  onStartSetup: () => Promise<void>;
   onTabChange: (tab: SettingsTab) => void;
   open: boolean;
   projectGuide: ProjectGuideData | null;
@@ -2127,17 +2203,117 @@ function SettingsDialog({
   repoError: string | null;
   repoForm: RepoConnectionInput;
   repoSaving: boolean;
-  selectedRepoName: string;
+  setupError: string | null;
+  setupPhase: SettingsSetupPhase;
+  setupSaving: boolean;
   workspace: WorkspaceSummary | null;
 }) {
+  const [connectPromptOpen, setConnectPromptOpen] = useState(false);
+  const [githubAuthorized, setGithubAuthorized] = useState(false);
+  const [setupEnvRows, setSetupEnvRows] = useState<EnvVariableRow[]>(() => [
+    createSetupEnvRow(),
+  ]);
+  const [setupEnvDraft, setSetupEnvDraft] = useState("");
+  const [setupEnvError, setSetupEnvError] = useState<string | null>(null);
   const connectedAccount =
     repoConnection?.repoFullName?.split("/").filter(Boolean)[0] ?? null;
   const workspaceName = workspace?.name ?? "Archetype";
   const workspaceRepoName = workspace?.repoName ?? "No default repo";
   const guideSummary = projectGuide?.guide.content.summary;
+  const canSelectRepo = hasConnectedRepo || githubAuthorized;
+  const repoOptions = Array.from(
+    new Set(
+      [
+        repoConnection?.repoFullName,
+        repoForm.repoUrl,
+        workspace?.repoName,
+      ].filter((value): value is string => Boolean(value?.trim())),
+    ),
+  );
+  const selectedRepoLabel = repoForm.repoUrl.trim() || "Select a repository";
+
+  function createSetupEnvRow(): EnvVariableRow {
+    return {
+      id: createEnvRowId(),
+      key: "",
+      value: "",
+      target: "development",
+      sensitive: true,
+      required: false,
+      public: false,
+      reason: "Manual variable",
+      sources: [],
+      visible: false,
+    };
+  }
+
+  function handleSettingsOpenChange(nextOpen: boolean) {
+    if (!nextOpen) {
+      setConnectPromptOpen(false);
+      setSetupEnvError(null);
+    }
+
+    onOpenChange(nextOpen);
+  }
+
+  function updateSetupEnvRow(
+    rowId: string,
+    patch: Partial<Omit<EnvVariableRow, "id">>,
+  ) {
+    setSetupEnvRows((currentRows) =>
+      currentRows.map((row) =>
+        row.id === rowId
+          ? {
+              ...row,
+              ...patch,
+              public:
+                patch.key !== undefined
+                  ? patch.key.startsWith("NEXT_PUBLIC_")
+                  : row.public,
+            }
+          : row,
+      ),
+    );
+  }
+
+  function addSetupEnvRow() {
+    setSetupEnvRows((currentRows) => [
+      ...currentRows,
+      createSetupEnvRow(),
+    ]);
+  }
+
+  async function saveEnvironmentAndStart() {
+    const parsedRows = parseEnvBlock(setupEnvDraft);
+    const rows = [
+      ...setupEnvRows.filter((row) => row.key.trim()),
+      ...parsedRows,
+    ];
+    const dedupedRows = Array.from(
+      new Map(rows.map((row) => [row.key.trim(), row])).values(),
+    ).filter((row) => row.key.trim());
+    const variables = dedupedRows.map((row) => ({
+      key: row.key.trim(),
+      value: row.value,
+      target: row.target,
+      sensitive: row.sensitive,
+    }));
+
+    setSetupEnvError(null);
+
+    try {
+      await onCompleteEnvironmentSetup(variables);
+    } catch (error) {
+      setSetupEnvError(
+        error instanceof Error
+          ? error.message
+          : "Failed to save environment and start setup.",
+      );
+    }
+  }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleSettingsOpenChange}>
       <DialogContent className="h-[min(760px,calc(100svh-2rem))] w-[min(calc(100%-2rem),72rem)] max-w-none overflow-hidden rounded-[1.6rem] bg-[oklch(0.985_0_0)] p-0">
         <DialogTitle className="sr-only">Settings</DialogTitle>
         <DialogDescription className="sr-only">
@@ -2257,11 +2433,171 @@ function SettingsDialog({
                   </div>
                 </div>
               </div>
-            ) : (
+            ) : setupPhase === "environment" ? (
               <form
-                className="mx-auto grid w-full max-w-4xl gap-10 px-6 py-10 sm:px-10"
-                onSubmit={onRepoSubmit}
+                className="mx-auto grid w-full max-w-4xl gap-8 px-6 py-10 sm:px-10"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void saveEnvironmentAndStart();
+                }}
               >
+                <div>
+                  <Button
+                    variant="ghost"
+                    className="-ml-2 mb-8 rounded-full"
+                    type="button"
+                    onClick={() => onSetupPhaseChange("github")}
+                  >
+                    <ArrowLeft className="size-4" />
+                    Github setup
+                  </Button>
+                  <h2 className="text-3xl font-semibold tracking-tight">
+                    Set up your environment
+                  </h2>
+                  <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+                    Add the environment variables your app needs to run, if any.
+                    Paste `KEY=value` lines or enter secrets manually.
+                  </p>
+                </div>
+
+                <section className="overflow-hidden rounded-2xl border border-border/80 bg-white">
+                  <div className="grid grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)_7rem_3rem] border-b border-border/70 px-4 py-3 text-sm font-semibold">
+                    <span>Name</span>
+                    <span>Value</span>
+                    <span>Secret</span>
+                    <span aria-label="Actions" />
+                  </div>
+                  <div className="divide-y divide-border/70">
+                    {setupEnvRows.map((row) => (
+                      <div
+                        key={row.id}
+                        className="grid grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)_7rem_3rem] items-center gap-3 px-4 py-3"
+                      >
+                        <Input
+                          className="h-10 border-0 bg-transparent px-0 font-mono text-sm shadow-none focus-visible:ring-0"
+                          placeholder="SECRET_NAME"
+                          value={row.key}
+                          onChange={(event) =>
+                            updateSetupEnvRow(row.id, {
+                              key: event.target.value
+                                .toUpperCase()
+                                .replace(/[^A-Z0-9_]/g, ""),
+                            })
+                          }
+                        />
+                        <div className="relative">
+                          <Input
+                            className="h-10 border-0 bg-transparent px-0 pr-9 font-mono text-sm shadow-none focus-visible:ring-0"
+                            placeholder="Paste value"
+                            type={
+                              row.sensitive && !row.visible
+                                ? "password"
+                                : "text"
+                            }
+                            value={row.value}
+                            onChange={(event) =>
+                              updateSetupEnvRow(row.id, {
+                                value: event.target.value,
+                              })
+                            }
+                          />
+                          {row.sensitive ? (
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              className="absolute right-0 top-1/2 -translate-y-1/2 transition-none hover:bg-transparent active:!translate-y-[-50%]"
+                              aria-label={
+                                row.visible ? "Hide value" : "Show value"
+                              }
+                              onClick={() =>
+                                updateSetupEnvRow(row.id, {
+                                  visible: !row.visible,
+                                })
+                              }
+                              type="button"
+                            >
+                              {row.visible ? (
+                                <EyeOff className="size-4" />
+                              ) : (
+                                <Eye className="size-4" />
+                              )}
+                            </Button>
+                          ) : null}
+                        </div>
+                        <Switch
+                          checked={row.sensitive}
+                          aria-label={`Mark ${row.key || "variable"} as secret`}
+                          onCheckedChange={(checked) =>
+                            updateSetupEnvRow(row.id, {
+                              sensitive: checked,
+                            })
+                          }
+                        />
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          className="rounded-md"
+                          aria-label={`Remove ${row.key || "variable"}`}
+                          onClick={() =>
+                            setSetupEnvRows((currentRows) =>
+                              currentRows.filter(
+                                (currentRow) => currentRow.id !== row.id,
+                              ),
+                            )
+                          }
+                          type="button"
+                        >
+                          <Trash2 className="size-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                  <Textarea
+                    className="min-h-16 rounded-none border-x-0 border-b-0 border-t border-border/70 bg-white px-4 py-3 font-mono text-sm shadow-none focus-visible:ring-0"
+                    placeholder="Paste KEY=value lines or type a secret name"
+                    value={setupEnvDraft}
+                    onChange={(event) => setSetupEnvDraft(event.target.value)}
+                  />
+                </section>
+
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <Button
+                    variant="ghost"
+                    className="w-fit rounded-full"
+                    type="button"
+                    onClick={addSetupEnvRow}
+                  >
+                    <Plus className="size-4" />
+                    Add variable
+                  </Button>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                    <Button
+                      variant="ghost"
+                      className="rounded-full"
+                      disabled={setupSaving}
+                      type="button"
+                      onClick={() => void onCompleteEnvironmentSetup([])}
+                    >
+                      I don&apos;t need any
+                    </Button>
+                    <Button
+                      className="rounded-full px-6"
+                      disabled={setupSaving}
+                      type="submit"
+                    >
+                      {setupSaving ? "Saving" : "Save"}
+                    </Button>
+                  </div>
+                </div>
+
+                {setupEnvError || setupError ? (
+                  <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                    {setupEnvError ?? setupError}
+                  </div>
+                ) : null}
+              </form>
+            ) : (
+              <div className="mx-auto grid w-full max-w-4xl gap-10 px-6 py-10 sm:px-10">
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
                   <div className="flex size-16 shrink-0 items-center justify-center rounded-2xl bg-[oklch(0.17_0_0)] text-white">
                     <GithubMark className="size-8" />
@@ -2278,17 +2614,20 @@ function SettingsDialog({
                   </div>
                 </div>
 
-                <div className="grid gap-8">
+                <div className="relative grid gap-8">
+                  <div className="absolute left-[17px] top-9 hidden h-[8.5rem] w-px bg-border sm:block" />
                   <GithubStep
-                    complete={hasConnectedRepo}
+                    complete={canSelectRepo}
                     index={1}
                     title={
                       hasConnectedRepo && connectedAccount
                         ? `Connected as ${connectedAccount}`
-                        : "Connect Github account"
+                        : canSelectRepo
+                          ? "Connected to GitHub"
+                          : "Connect GitHub"
                     }
                     action={
-                      hasConnectedRepo ? (
+                      canSelectRepo ? (
                         <Button
                           variant="outline"
                           className="rounded-full"
@@ -2299,39 +2638,66 @@ function SettingsDialog({
                         </Button>
                       ) : (
                         <Button
+                          variant="outline"
                           className="rounded-full"
-                          disabled={!repoForm.repoUrl.trim() || repoSaving}
-                          type="submit"
+                          type="button"
+                          onClick={() => setConnectPromptOpen(true)}
                         >
                           Connect
                         </Button>
                       )
                     }
                   >
-                    {!hasConnectedRepo ? (
+                    {!canSelectRepo ? (
                       <p className="max-w-xl text-sm leading-6 text-muted-foreground">
-                        Enter a repository below to establish the first Github
-                        connection for this workspace.
+                        Link this workspace to GitHub before selecting the
+                        codebase Archetype should scan.
                       </p>
                     ) : null}
                   </GithubStep>
 
                   <GithubStep
-                    complete={hasConnectedRepo}
+                    complete={Boolean(repoForm.repoUrl.trim()) && canSelectRepo}
                     index={2}
                     title="Select repository"
                     action={
-                      hasConnectedRepo ? (
-                        <Button
-                          variant="outline"
-                          className="max-w-[16rem] justify-between gap-3 rounded-full"
-                          type="button"
-                          onClick={() => onTabChange("github")}
-                        >
-                          <span className="truncate">{selectedRepoName}</span>
-                          <ChevronDown className="size-4 shrink-0" />
-                        </Button>
-                      ) : null
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className="max-w-[16rem] justify-between gap-3 rounded-full"
+                            disabled={!canSelectRepo}
+                            type="button"
+                          >
+                            <span className="truncate">{selectedRepoLabel}</span>
+                            <ChevronDown className="size-4 shrink-0" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent className="w-64 p-1" align="end">
+                          <div className="px-2 py-2 text-sm text-muted-foreground">
+                            Search repositories...
+                          </div>
+                          {repoOptions.length ? (
+                            repoOptions.map((repoOption) => (
+                              <DropdownMenuItem
+                                key={repoOption}
+                                onSelect={() =>
+                                  onRepoFormChange((current) => ({
+                                    ...current,
+                                    repoUrl: repoOption,
+                                  }))
+                                }
+                              >
+                                {repoOption}
+                              </DropdownMenuItem>
+                            ))
+                          ) : (
+                            <DropdownMenuItem disabled>
+                              No repositories yet
+                            </DropdownMenuItem>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     }
                   >
                     <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_10rem]">
@@ -2339,6 +2705,7 @@ function SettingsDialog({
                         Repository
                         <Input
                           className="mt-1.5 h-10"
+                          disabled={!canSelectRepo}
                           placeholder="owner/repo or https://github.com/owner/repo"
                           value={repoForm.repoUrl}
                           onChange={(event) =>
@@ -2353,6 +2720,7 @@ function SettingsDialog({
                         Branch
                         <Input
                           className="mt-1.5 h-10"
+                          disabled={!canSelectRepo}
                           value={repoForm.branch}
                           onChange={(event) =>
                             onRepoFormChange((current) => ({
@@ -2366,19 +2734,24 @@ function SettingsDialog({
                   </GithubStep>
 
                   <GithubStep
-                    complete={Boolean(projectGuide)}
+                    complete={false}
                     index={3}
                     title="Run setup agent"
                     action={
                       <Button
                         className="min-w-36 rounded-full"
-                        disabled={repoSaving || !repoForm.repoUrl.trim()}
-                        type="submit"
+                        disabled={
+                          repoSaving ||
+                          !canSelectRepo ||
+                          !repoForm.repoUrl.trim()
+                        }
+                        type="button"
+                        onClick={() => void onStartSetup()}
                       >
                         {repoSaving
                           ? "Running"
                           : projectGuide
-                            ? "Run again"
+                            ? "Start"
                             : "Start"}
                       </Button>
                     }
@@ -2416,9 +2789,64 @@ function SettingsDialog({
                         {repoError}
                       </div>
                     ) : null}
+                    {setupError ? (
+                      <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                        {setupError}
+                      </div>
+                    ) : null}
                   </GithubStep>
                 </div>
-              </form>
+                {connectPromptOpen ? (
+                  <div className="absolute inset-0 z-10 grid place-items-center bg-[oklch(0.18_0.012_260_/_0.28)] px-4">
+                    <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-[0_24px_70px_oklch(0.18_0.012_260_/_0.18)]">
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <h3 className="text-lg font-semibold">
+                            Connect GitHub
+                          </h3>
+                          <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                            Link your workspace to GitHub. Reconnect signs you
+                            in and reuses an existing installation when one is
+                            already available.
+                          </p>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label="Close GitHub connection prompt"
+                          onClick={() => setConnectPromptOpen(false)}
+                          type="button"
+                        >
+                          <X className="size-4" />
+                        </Button>
+                      </div>
+                      <div className="mt-8 flex justify-end gap-2">
+                        <Button
+                          variant="outline"
+                          className="rounded-full"
+                          onClick={() => {
+                            setGithubAuthorized(true);
+                            setConnectPromptOpen(false);
+                          }}
+                          type="button"
+                        >
+                          Reconfigure installation
+                        </Button>
+                        <Button
+                          className="rounded-full"
+                          onClick={() => {
+                            setGithubAuthorized(true);
+                            setConnectPromptOpen(false);
+                          }}
+                          type="button"
+                        >
+                          Reconnect
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
             )}
           </div>
         </div>
@@ -2430,34 +2858,48 @@ function SettingsDialog({
 function DashboardView({
   creatingSession,
   onCreateSession,
+  onInitializeSetupSession,
   onPromptChange,
   onRepoConnected,
+  onSettingsOpenChange,
+  onSettingsTabChange,
   onSelectPrototype,
   prompt,
   prototypeCards,
   projectGuide,
   repoConnection,
+  settingsOpen,
+  settingsTab,
   workspace,
 }: {
   creatingSession: boolean;
   onCreateSession: (images?: File[]) => void;
+  onInitializeSetupSession: (brief: string) => Promise<void>;
   onPromptChange: (value: string) => void;
   onRepoConnected: (payload: {
     connection: RepoConnectionData;
     guide: ProjectGuideData;
   }) => void;
+  onSettingsOpenChange: (value: boolean) => void;
+  onSettingsTabChange: (tab: SettingsTab) => void;
   onSelectPrototype: (card: PrototypeCardData) => void;
   prompt: string;
   prototypeCards: PrototypeCardData[];
   projectGuide: ProjectGuideData | null;
   repoConnection: RepoConnectionData | null;
+  settingsOpen: boolean;
+  settingsTab: SettingsTab;
   workspace: WorkspaceSummary | null;
 }) {
   const imageInputRef = useRef<HTMLInputElement>(null);
   const promptRef = useRef<HTMLTextAreaElement>(null);
   const [guideOpen, setGuideOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [settingsTab, setSettingsTab] = useState<SettingsTab>("general");
+  const [settingsSetupPhase, setSettingsSetupPhase] =
+    useState<SettingsSetupPhase>("github");
+  const [settingsSetupSaving, setSettingsSetupSaving] = useState(false);
+  const [settingsSetupError, setSettingsSetupError] = useState<string | null>(
+    null,
+  );
   const [selectedImages, setSelectedImages] = useState<File[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<DashboardSort>("lastEdited");
@@ -2554,7 +2996,9 @@ function DashboardView({
   const hasConnectedRepo =
     repoConnection?.status === "ready" && Boolean(repoConnection.repoFullName);
   const selectedRepoName =
-    repoConnection?.repoFullName ?? workspace?.repoName ?? "Connect repo";
+    hasConnectedRepo && repoConnection?.repoFullName
+      ? repoConnection.repoFullName
+      : "Select repo";
   const guideStatus = projectGuide
     ? projectGuide.guide.stale
       ? "Project guide stale"
@@ -2571,8 +3015,12 @@ function DashboardView({
   };
 
   const openSettings = (tab: SettingsTab) => {
-    setSettingsTab(tab);
-    setSettingsOpen(true);
+    onSettingsTabChange(tab);
+    if (tab === "github") {
+      setSettingsSetupPhase("github");
+    }
+    setSettingsSetupError(null);
+    onSettingsOpenChange(true);
   };
 
   async function handleRepoSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -2596,6 +3044,67 @@ function DashboardView({
     }
   }
 
+  async function handleStartGithubSetup() {
+    if (repoSaving || !repoForm.repoUrl.trim()) {
+      return;
+    }
+
+    setRepoSaving(true);
+    setRepoError(null);
+    setSettingsSetupError(null);
+
+    try {
+      const payload = await connectRepoAndScan(repoForm);
+
+      onRepoConnected(payload);
+      setSettingsSetupPhase("environment");
+    } catch (error) {
+      setSettingsSetupError(
+        error instanceof Error ? error.message : "Repo setup failed.",
+      );
+    } finally {
+      setRepoSaving(false);
+    }
+  }
+
+  async function handleCompleteEnvironmentSetup(
+    variables: SaveRepoEnvironmentInput[],
+  ) {
+    if (settingsSetupSaving) {
+      return;
+    }
+
+    setSettingsSetupSaving(true);
+    setSettingsSetupError(null);
+
+    try {
+      if (variables.length > 0) {
+        await saveRepoEnvironment(variables);
+      }
+
+      const envKeys = variables.map((variable) => variable.key);
+      const setupPrompt = createEnvironmentSetupPrompt({
+        branch: repoForm.branch,
+        envKeys,
+        previewOrigin: repoForm.previewOrigin,
+        prototypeRoot: repoForm.prototypeRoot,
+        repoFullName: repoForm.repoUrl,
+      });
+
+      onSettingsOpenChange(false);
+      setSettingsSetupPhase("github");
+      await onInitializeSetupSession(setupPrompt);
+    } catch (error) {
+      setSettingsSetupError(
+        error instanceof Error
+          ? error.message
+          : "Failed to save environment and start setup.",
+      );
+    } finally {
+      setSettingsSetupSaving(false);
+    }
+  }
+
   return (
     <div className="h-full overflow-y-auto">
       <div className="relative min-h-full">
@@ -2603,17 +3112,21 @@ function DashboardView({
           <SettingsDialog
             activeTab={settingsTab}
             hasConnectedRepo={hasConnectedRepo}
-            onOpenChange={setSettingsOpen}
+            onCompleteEnvironmentSetup={handleCompleteEnvironmentSetup}
+            onOpenChange={onSettingsOpenChange}
             onRepoFormChange={setRepoForm}
-            onRepoSubmit={handleRepoSubmit}
-            onTabChange={setSettingsTab}
+            onSetupPhaseChange={setSettingsSetupPhase}
+            onStartSetup={handleStartGithubSetup}
+            onTabChange={onSettingsTabChange}
             open={settingsOpen}
             projectGuide={projectGuide}
             repoConnection={repoConnection}
             repoError={repoError}
             repoForm={repoForm}
             repoSaving={repoSaving}
-            selectedRepoName={selectedRepoName}
+            setupError={settingsSetupError}
+            setupPhase={settingsSetupPhase}
+            setupSaving={settingsSetupSaving}
             workspace={workspace}
           />
 
@@ -2947,13 +3460,15 @@ function DashboardView({
                                 </span>
                               </DropdownMenuItem>
                             )}
-                            <DropdownMenuItem
-                              className="gap-3 px-2 py-2 text-base"
-                              onSelect={() => openSettings("github")}
-                            >
-                              <Plus className="size-5 text-muted-foreground" />
-                              Add another repo
-                            </DropdownMenuItem>
+                            {hasConnectedRepo ? (
+                              <DropdownMenuItem
+                                className="gap-3 px-2 py-2 text-base"
+                                onSelect={() => openSettings("github")}
+                              >
+                                <Plus className="size-5 text-muted-foreground" />
+                                Add another repo
+                              </DropdownMenuItem>
+                            ) : null}
                           </div>
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -3257,21 +3772,25 @@ function DashboardSidebarOverlay({
   onRecentOpenChange,
   open,
   onClose,
+  onOpenSettings,
   onSearchChange,
   recentSessionCards,
   recentOpen,
   searchQuery,
   onSelectPrototype,
+  onSignOut,
   workspaceName,
 }: {
   onRecentOpenChange: (value: boolean) => void;
   open: boolean;
   onClose: () => void;
+  onOpenSettings: () => void;
   onSearchChange: (value: string) => void;
   recentSessionCards: PrototypeCardData[];
   recentOpen: boolean;
   searchQuery: string;
   onSelectPrototype: (card: PrototypeCardData) => void;
+  onSignOut: () => void;
   workspaceName: string;
 }) {
   if (!open) {
@@ -3299,12 +3818,17 @@ function DashboardSidebarOverlay({
               <X className="size-4" />
             </Button>
           }
+          onOpenSettings={() => {
+            onClose();
+            onOpenSettings();
+          }}
           onRecentOpenChange={onRecentOpenChange}
           onSearchChange={onSearchChange}
           onSelectPrototype={(card) => {
             onClose();
             onSelectPrototype(card);
           }}
+          onSignOut={onSignOut}
           recentOpen={recentOpen}
           recentSessionCards={recentSessionCards}
           searchQuery={searchQuery}
@@ -4211,6 +4735,34 @@ function serializeEnvRows(rows: EnvVariableRow[]) {
     .filter((row) => row.key.trim())
     .map((row) => `${row.key.trim()}=${serializeClientEnvValue(row.value)}`)
     .join("\n");
+}
+
+function createEnvironmentSetupPrompt({
+  branch,
+  envKeys,
+  previewOrigin,
+  prototypeRoot,
+  repoFullName,
+}: {
+  branch: string;
+  envKeys: string[];
+  previewOrigin: string;
+  prototypeRoot: string;
+  repoFullName: string;
+}) {
+  const envSummary = envKeys.length
+    ? `Environment variables saved: ${envKeys.join(", ")}.`
+    : "No environment variables were required.";
+
+  return [
+    "Set up the development environment for this codebase. Run the application(s) and demonstrate the environment is working.",
+    "",
+    `Repository: ${repoFullName}`,
+    `Branch: ${branch}`,
+    `Prototype root: ${prototypeRoot}`,
+    `Preview origin: ${previewOrigin}`,
+    envSummary,
+  ].join("\n");
 }
 
 function ToolbarIconButton({
@@ -5600,6 +6152,8 @@ function AppShell() {
   );
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [recentOpen, setRecentOpen] = useState(true);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>("general");
   const [sidebarSearch, setSidebarSearch] = useState("");
 
   const toggleSidebar = useCallback((source: "pointer" | "keyboard") => {
@@ -5618,6 +6172,20 @@ function AppShell() {
     },
     [router],
   );
+  const openSettings = useCallback((tab: SettingsTab) => {
+    setSettingsTab(tab);
+    setSettingsOpen(true);
+  }, []);
+  const handleSignOut = useCallback(async () => {
+    try {
+      if (!TEST_MODE) {
+        await logoutPrivateBeta();
+      }
+    } finally {
+      clearPendingPromptStorage();
+      window.location.assign("/");
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -5676,11 +6244,19 @@ function AppShell() {
     };
   }, [toggleSidebar]);
 
-  async function handleCreateSession(images: File[] = []) {
-    const brief = prompt.trim();
-    const title = deriveSessionTitle(brief);
+  async function createSessionFromBrief({
+    brief,
+    images = [],
+    tab = "Preview",
+  }: {
+    brief: string;
+    images?: File[];
+    tab?: WorkspaceTab;
+  }) {
+    const trimmedBrief = brief.trim();
+    const title = deriveSessionTitle(trimmedBrief);
 
-    if (!brief || creatingSession) {
+    if (!trimmedBrief || creatingSession) {
       return;
     }
 
@@ -5689,23 +6265,45 @@ function AppShell() {
       const payload = await createSession(title);
       const nextCard = sessionToPrototypeCard(payload);
 
-      if (images.length > 0) {
-        await submitSessionPrompt(payload.id, brief, images);
+      if (images.length > 0 || tab === "Setup") {
+        await submitSessionPrompt(payload.id, trimmedBrief, images);
       } else if (typeof window !== "undefined") {
-        window.sessionStorage.setItem(`pending-prompt:${payload.id}`, brief);
+        window.sessionStorage.setItem(
+          `pending-prompt:${payload.id}`,
+          trimmedBrief,
+        );
       }
       setSessionCards((current) => [nextCard, ...current]);
-      setPrompt("");
-      router.push(prototypeUrl({ sessionId: payload.id, tab: "Preview" }));
+      if (trimmedBrief === prompt.trim()) {
+        setPrompt("");
+      }
+      router.push(prototypeUrl({ sessionId: payload.id, tab }));
     } catch {
       const fallbackSession = createLocalSessionSummary(title);
       const nextCard = sessionToPrototypeCard(fallbackSession);
 
       setSessionCards((current) => [nextCard, ...current]);
-      setPrompt("");
+      if (trimmedBrief === prompt.trim()) {
+        setPrompt("");
+      }
     } finally {
       setCreatingSession(false);
     }
+  }
+
+  async function handleCreateSession(images: File[] = []) {
+    await createSessionFromBrief({
+      brief: prompt,
+      images,
+      tab: "Preview",
+    });
+  }
+
+  async function handleInitializeSetupSession(brief: string) {
+    await createSessionFromBrief({
+      brief,
+      tab: "Setup",
+    });
   }
 
   const recentSessionCards = useMemo(
@@ -5722,12 +6320,14 @@ function AppShell() {
       <DashboardSidebarOverlay
         open={mobileSidebarOpen}
         onClose={() => setMobileSidebarOpen(false)}
+        onOpenSettings={() => openSettings("general")}
         onRecentOpenChange={setRecentOpen}
         onSearchChange={setSidebarSearch}
         recentOpen={recentOpen}
         recentSessionCards={recentSessionCards}
         searchQuery={sidebarSearch}
         onSelectPrototype={handleSelectPrototype}
+        onSignOut={handleSignOut}
         workspaceName={workspace?.name ?? "Archetype"}
       />
       <aside
@@ -5739,9 +6339,11 @@ function AppShell() {
       >
         {sidebarCollapsed ? null : (
           <WorkspaceSidebarContent
+            onOpenSettings={() => openSettings("general")}
             onRecentOpenChange={setRecentOpen}
             onSearchChange={setSidebarSearch}
             onSelectPrototype={handleSelectPrototype}
+            onSignOut={handleSignOut}
             projectGuide={projectGuide}
             recentOpen={recentOpen}
             recentSessionCards={recentSessionCards}
@@ -5809,16 +6411,21 @@ function AppShell() {
               }
               creatingSession={creatingSession}
               onCreateSession={handleCreateSession}
+              onInitializeSetupSession={handleInitializeSetupSession}
               onPromptChange={setPrompt}
               onRepoConnected={({ connection, guide }) => {
                 setRepoConnection(connection);
                 setProjectGuide(guide);
               }}
+              onSettingsOpenChange={setSettingsOpen}
+              onSettingsTabChange={setSettingsTab}
               onSelectPrototype={handleSelectPrototype}
               prompt={prompt}
               prototypeCards={sessionCards}
               projectGuide={projectGuide}
               repoConnection={repoConnection}
+              settingsOpen={settingsOpen}
+              settingsTab={settingsTab}
               workspace={workspace}
             />
           </div>
