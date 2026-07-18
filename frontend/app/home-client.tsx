@@ -114,11 +114,14 @@ const LOCAL_AUTH_BYPASS =
     (process.env.NEXT_PUBLIC_LOCAL_AUTH_BYPASS ?? "true").toLowerCase(),
   );
 const AUTH_UNAVAILABLE_MESSAGE = "Auth endpoint unavailable.";
+const DEFAULT_PRIVATE_BETA_EMAIL = "founder@archetype.dev";
 const DEFAULT_PROTOTYPE_PREVIEW_PATH = "/patrimony";
 const SHOW_PROJECT_GUIDE_FEATURE = false;
 const SHOW_REPO_SELECTOR = true;
 const SHOW_BRIEF_TEMPLATE_MENU = false;
 const CHAT_PANEL_WIDTH_STORAGE_KEY = "archetype:workspace-chat-panel-width";
+const AUTH_SIGNED_OUT_STORAGE_KEY = "archetype:auth:signed-out";
+const AUTH_SIGNED_OUT_EVENT = "archetype:auth-signed-out";
 const CHAT_PANEL_DEFAULT_WIDTH = 380;
 const CHAT_PANEL_MIN_WIDTH = 300;
 const CHAT_PANEL_MAX_WIDTH = 640;
@@ -1419,6 +1422,10 @@ async function fetchCurrentActor() {
     cache: "no-store",
   });
 
+  if (response.status === 404) {
+    throw new Error(AUTH_UNAVAILABLE_MESSAGE);
+  }
+
   if (!response.ok) {
     throw new Error(`Auth request failed with ${response.status}`);
   }
@@ -1486,6 +1493,27 @@ async function logoutPrivateBeta() {
   await apiFetch("/auth/logout", {
     method: "POST",
   });
+}
+
+function readAuthSignedOutFlag() {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  return window.localStorage.getItem(AUTH_SIGNED_OUT_STORAGE_KEY) === "1";
+}
+
+function setAuthSignedOutFlag(signedOut: boolean) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  if (signedOut) {
+    window.localStorage.setItem(AUTH_SIGNED_OUT_STORAGE_KEY, "1");
+    return;
+  }
+
+  window.localStorage.removeItem(AUTH_SIGNED_OUT_STORAGE_KEY);
 }
 
 function clearPendingPromptStorage() {
@@ -2288,14 +2316,31 @@ function WhiteHeroLogo() {
 
 function AuthGate({ children }: { children: React.ReactNode }) {
   const [actor, setActor] = useState<AuthPayload | null>(null);
-  const [email, setEmail] = useState("founder@archetype.dev");
+  const [signedOut, setSignedOut] = useState(() => readAuthSignedOutFlag());
+  const [email, setEmail] = useState(DEFAULT_PRIVATE_BETA_EMAIL);
   const [passcode, setPasscode] = useState("");
-  const [loading, setLoading] = useState(!TEST_MODE);
+  const [loading, setLoading] = useState(
+    () => !TEST_MODE && !readAuthSignedOutFlag(),
+  );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (TEST_MODE) {
+    function handleSignedOut() {
+      setActor(null);
+      setSignedOut(true);
+      setLoading(false);
+    }
+
+    window.addEventListener(AUTH_SIGNED_OUT_EVENT, handleSignedOut);
+
+    return () => {
+      window.removeEventListener(AUTH_SIGNED_OUT_EVENT, handleSignedOut);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (TEST_MODE || signedOut) {
       return;
     }
 
@@ -2308,9 +2353,13 @@ function AuthGate({ children }: { children: React.ReactNode }) {
           setError(null);
         }
       })
-      .catch(() => {
+      .catch((authError) => {
         if (!cancelled) {
-          setActor(null);
+          setActor(
+            LOCAL_AUTH_BYPASS && isAuthUnavailableError(authError)
+              ? createLocalAuthPayload(DEFAULT_PRIVATE_BETA_EMAIL)
+              : null,
+          );
         }
       })
       .finally(() => {
@@ -2322,7 +2371,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [signedOut]);
 
   async function handleLogin(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -2335,10 +2384,18 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     setError(null);
 
     try {
-      setActor(await loginPrivateBeta(email, passcode));
+      const nextActor = TEST_MODE
+        ? createLocalAuthPayload(email)
+        : await loginPrivateBeta(email, passcode);
+
+      setAuthSignedOutFlag(false);
+      setSignedOut(false);
+      setActor(nextActor);
       setPasscode("");
     } catch (loginError) {
       if (LOCAL_AUTH_BYPASS && isAuthUnavailableError(loginError)) {
+        setAuthSignedOutFlag(false);
+        setSignedOut(false);
         setActor(createLocalAuthPayload(email));
         setPasscode("");
         setError(null);
@@ -2355,7 +2412,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     }
   }
 
-  if (TEST_MODE || actor) {
+  if ((TEST_MODE && !signedOut) || actor) {
     return <>{children}</>;
   }
 
@@ -2410,23 +2467,27 @@ function AuthGate({ children }: { children: React.ReactNode }) {
           ) : null}
           <Button
             className="auth-gradient-button mt-7 h-11 w-full rounded-lg text-[oklch(0.985_0.006_255)] disabled:opacity-55"
-            disabled={submitting || !email.trim() || !passcode.trim()}
+            disabled={
+              submitting || !email.trim() || (!TEST_MODE && !passcode.trim())
+            }
             type="submit"
           >
             {submitting ? "Signing in" : "Sign in"}
           </Button>
         </form>
       </section>
-      <section
-        className="relative hidden min-h-screen overflow-hidden bg-[length:cover] bg-center lg:flex lg:items-center lg:justify-center"
-        style={{ backgroundImage: 'url("/archetype_bg_signin_image.jpg")' }}
-      >
-        <div className="absolute inset-0 bg-[oklch(0.12_0.018_260_/_0.18)]" />
-        <div className="relative z-10 flex items-center gap-5">
-          <WhiteHeroLogo />
-          <span className="text-7xl font-semibold leading-none tracking-normal text-[oklch(0.985_0.006_255)] drop-shadow-[0_26px_72px_oklch(0.12_0.035_260_/_0.36)] xl:text-8xl">
-            Archetype
-          </span>
+      <section className="hidden min-h-screen bg-card p-5 lg:block">
+        <div
+          className="relative flex h-full min-h-[calc(100vh-2.5rem)] items-center justify-center overflow-hidden rounded-[36px] bg-[length:cover] bg-center shadow-[0_28px_90px_oklch(0.18_0.025_260_/_0.16)]"
+          style={{ backgroundImage: 'url("/archetype_bg_signin_image.jpg")' }}
+        >
+          <div className="absolute inset-0 bg-[oklch(0.12_0.018_260_/_0.18)]" />
+          <div className="relative z-10 flex items-center gap-5">
+            <WhiteHeroLogo />
+            <span className="text-7xl font-semibold leading-none tracking-normal text-[oklch(0.985_0.006_255)] drop-shadow-[0_26px_72px_oklch(0.12_0.035_260_/_0.36)] xl:text-8xl">
+              Archetype
+            </span>
+          </div>
         </div>
       </section>
     </main>
@@ -6928,8 +6989,9 @@ function AppShell() {
         await logoutPrivateBeta();
       }
     } finally {
+      setAuthSignedOutFlag(true);
       clearPendingPromptStorage();
-      window.location.assign("/");
+      window.dispatchEvent(new Event(AUTH_SIGNED_OUT_EVENT));
     }
   }, []);
 
