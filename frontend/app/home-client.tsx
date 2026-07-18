@@ -2133,6 +2133,8 @@ function DashboardView({
         },
       ]
     : [];
+  const hasConnectedRepo =
+    repoConnection?.status === "ready" && Boolean(repoConnection.repoFullName);
   const selectedRepoName =
     repoConnection?.repoFullName ?? workspace?.repoName ?? "Connect repo";
   const guideStatus = projectGuide
@@ -2485,14 +2487,26 @@ function DashboardView({
                             <div className="px-2 py-1 text-sm font-medium text-muted-foreground">
                               Codebase
                             </div>
-                            <DropdownMenuItem
-                              className="gap-3 px-2 py-2 text-base"
-                              onSelect={() => setGuideOpen(true)}
-                            >
-                              <GithubMark className="size-5" />
-                              <span className="truncate">{selectedRepoName}</span>
-                              <Check className="ml-auto size-4" />
-                            </DropdownMenuItem>
+                            {hasConnectedRepo ? (
+                              <DropdownMenuItem
+                                className="gap-3 px-2 py-2 text-base"
+                                onSelect={() => setGuideOpen(true)}
+                              >
+                                <GithubMark className="size-5" />
+                                <span className="truncate">{selectedRepoName}</span>
+                                <Check className="ml-auto size-4" />
+                              </DropdownMenuItem>
+                            ) : (
+                              <DropdownMenuItem
+                                className="gap-3 px-2 py-2 text-base"
+                                onSelect={() => setGuideOpen(true)}
+                              >
+                                <GithubMark className="size-5" />
+                                <span className="truncate">
+                                  Connect to Github
+                                </span>
+                              </DropdownMenuItem>
+                            )}
                             <DropdownMenuItem
                               className="gap-3 px-2 py-2 text-base"
                               onSelect={() => setGuideOpen(true)}
